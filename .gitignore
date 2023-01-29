@@ -1,0 +1,5 @@
+*.txt
+*.json
+*.pt
+!json/Bocchi-chan.json
+!dataset/empty.txt
