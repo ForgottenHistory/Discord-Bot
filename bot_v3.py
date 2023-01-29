@@ -91,6 +91,27 @@ default_responses = [
 
 previous_response = None
 memory = []
+
+def change_personality(index):
+    global jsonFiles
+    global jsonFilePath
+    global this_settings
+    global preprompt
+    global char_name
+    
+    with open(f"{jsonFilePath}{jsonFiles[index - 1]}", "r") as f:
+        data = json.load(f)
+    # Access the values
+    char_name = data["char_name"]
+    char_persona = data["char_persona"]
+
+    # extract the example_dialogue if present
+    example_dialogue = data.get("example_dialogue", None)
+    world_scenario = data.get("world_scenario", None)
+
+    preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\nScenario: {world_scenario}"
+    print(preprompt)
+    
 # Define a function to generate the response
 def generate_response(prompt, user):
     global previous_response
@@ -190,6 +211,15 @@ async def on_message(message):
         print(string)
         await message.channel.send(string, reference=message, mention_author=False)
 
+    if message.content.startswith('!!!personality') and message.author.id == 837454923364827206:
+        match = re.search(r'\d+$', message.content)
+        if match:
+            number = int(match.group())
+            print(number)
+            change_personality(number)
+        else:
+            print("No match")
+    
     # Change active channel
     if message.content.startswith('!!!channel') and message.author.id == 837454923364827206:
         channelID = message.channel.id
