@@ -3,3 +3,4 @@
 *.pt
 !json/Bocchi-chan.json
 !dataset/empty.txt
+!relations/Hitori Gotoh (Bocchi).json

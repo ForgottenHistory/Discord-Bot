@@ -4,6 +4,7 @@ import requests
 import json
 from os import listdir
 from os.path import isfile, join
+import asyncio
 
 # Load words that will NOT be said
 
@@ -16,26 +17,19 @@ word_list = [x.strip() for x in word_list]
 
 # Load character
 
-jsonFilePath = "./json/"
 counter = 0
-jsonFiles = [f for f in listdir(jsonFilePath) if isfile(join(jsonFilePath, f))]
+jsonFiles = [f for f in listdir("./json/") if isfile(join("./json/", f))]
 for f in jsonFiles:
     counter += 1
     print( str(counter) + ". " + str(f))
 
 print("Which file to load?")
 file_index = int(input())
-file_to_read = jsonFiles[ file_index - 1 ]
-with open(f"{jsonFilePath}{file_to_read}", "r") as f:
-    data = json.load(f)
 
-# Access the values
-char_name = data["char_name"]
-char_persona = data["char_persona"]
-
-# extract the example_dialogue if present
-example_dialogue = data.get("example_dialogue", None)
-world_scenario = data.get("world_scenario", None)
+# Values that need to global
+char_name = ""
+preprompt = ""
+use_greeting = False
 
 #Discord client setup
 
@@ -50,10 +44,61 @@ api_server = settings["api_server"]
 bot_token = settings["discord_token"]
 channelID = settings["channelID"]
 memory_length = settings["memory_length"]
-
+use_greeting = settings["use_greeting"]
 sampler_order = [6,0,1,2,3,4,5]
-preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\nScenario: {world_scenario}"
-print(preprompt)
+
+memory = []
+people_memory = { "meanie":7.0 }
+
+# Change personality
+
+async def send_message(text):
+    global channelID, client
+    channel = client.get_channel(channelID)
+    await channel.send(text)
+
+async def change_personality(index):
+    global jsonFiles
+    global jsonFilePath
+    global this_settings
+    global preprompt
+    global char_name
+    global people_memory
+    global use_greeting
+    global memory
+    
+    with open(f"./json/{jsonFiles[index - 1]}", "r") as f:
+        data = json.load(f)
+    # Access the values
+    char_name = data["char_name"]
+    char_persona = data["char_persona"]
+    char_greeting = data.get("char_greeting", None)
+    if char_greeting == None:
+        char_greeting = data.get("first_mes", None)
+    
+    # Check for W++
+    match = re.search("[\{\}]", char_persona)
+    if match is None:
+        char_persona += "[character(\"{}\")\n{{\n}}\n]".format(char_name)
+    
+    # extract the example_dialogue if present
+    example_dialogue = data.get("example_dialogue", None)
+    world_scenario = data.get("world_scenario", None)
+    
+    preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\nScenario: {world_scenario}"
+    if isfile(f"./relations/{char_name}.json"):
+        with open(f"./relations/{char_name}.json", "r") as f:
+            people_memory = json.load(f)
+            print("Loaded relations.")
+    else:
+        print("No relations saved")
+        with open(f"./relations/{char_name}.json", "w") as outfile:
+             json.dump(people_memory, outfile)
+    
+    print(preprompt)
+    if use_greeting and char_greeting != None:
+        memory.append(char_greeting)
+        await send_message(char_greeting)
 
 this_settings = { 
     "prompt": " ",
@@ -61,24 +106,24 @@ this_settings = {
     "use_memory": False,
     "use_authors_note": False,
     "use_world_info": False,
-    "max_context_length": 1500,
-    "max_length": 80,
+    "max_context_length": 1613,
+    "max_length": 50,
     "rep_pen": 1.08,
     "rep_pen_range": 1024,
     "rep_pen_slope": 0.9,
-    "temperature": 1.0,
+    "temperature": 0.65,
     "tfs": 0.9,
     "top_a": 0,
-    "top_k": 5,
+    "top_k": 0,
     "top_p": 0.9,
     "typical": 1,
     "sampler_order": sampler_order
-    }
+}
+
+# Misc values
 
 api_server += "/api"
 headers = {"Content-Type": "application/json"}
-
-# Initialize the tokenizer and model
 
 print("Starting bot...")
 
@@ -90,39 +135,49 @@ default_responses = [
 ]
 
 previous_response = None
-memory = []
 
-def change_personality(index):
-    global jsonFiles
-    global jsonFilePath
-    global this_settings
-    global preprompt
-    global char_name
-    
-    with open(f"{jsonFilePath}{jsonFiles[index - 1]}", "r") as f:
-        data = json.load(f)
-    # Access the values
-    char_name = data["char_name"]
-    char_persona = data["char_persona"]
+# For finding a rating about a user the bot returns
+def find_float_or_int(string):
+    match = re.search("[-+]?\d*\.\d+|\d+", string)
+    if match:
+        return float(match.group())
+    else:
+        return None
 
-    # extract the example_dialogue if present
-    example_dialogue = data.get("example_dialogue", None)
-    world_scenario = data.get("world_scenario", None)
-
-    preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\nScenario: {world_scenario}"
-    print(preprompt)
-    
 # Define a function to generate the response
 def generate_response(prompt, user):
     global previous_response
-    global memory
+    global memory, people_memory
     global char_name
 
     memory.append(f"{user}: {prompt}")
     while len(memory) > memory_length:
         memory.pop(0) # remove oldest message if memory is full
+
+    # Add relationships
+    prepromt_fixed = preprompt
+    relations = "Relations("
+    for person in people_memory:
+        value = people_memory[person]
+        if value >= 5.5 and value < 9.5:
+            relations += f"\"You like {person}\"+"
+        elif value >= 9.5:
+            relations += f"\"You love {person}\"+"
+        elif value > 2.0 and value <= 4.5:
+            relations += f"\"You dislike {person}\"+"
+        elif value <= 2.0:
+            relations += f"\"You hate {person}\"+"
+
+    relations = relations[:-1] + ")"
+    
+    # Find the index of the closing curly bracket
+    index = prepromt_fixed.find("}")
+
+    # Insert the relations before the closing bracket
+    prepromt_fixed = prepromt_fixed[:index] + f"{relations}" + prepromt_fixed[index:]
+    
     # Concatenate the most recent messages in memory to use as the prompt
-    prompt = preprompt + "\n"
+    prompt = prepromt_fixed + "\n"
     prompt += "\n".join(f"{mem}" for mem in memory) + f"\n{char_name}: "
     #print(f"\n" + prompt)
     
@@ -136,7 +191,8 @@ def generate_response(prompt, user):
 
     # Response code check
     if response.status_code == 200:
-        print('Valid response')
+        print(' ')
+        #print('Valid response')
     elif response.status_code == 422:
         print('Validation error')
     elif response.status_code in [501, 503, 507]:
@@ -149,7 +205,7 @@ def generate_response(prompt, user):
     response_lines = response_text.split("\n")
     print(response_lines)
     for x in range(0, len(response_lines)):
-        if response_lines[x].split(":")[-1] is not '':
+        if response_lines[x].split(":")[-1] != '':
             response_text = response_lines[x].split(":")[-1]
             break
 
@@ -172,28 +228,58 @@ def generate_response(prompt, user):
     previous_response = response_text
     return response_text
 
-wait = False
+message_counter = 0
+sleeping = False
 @client.event
 async def on_message(message):
     global channelID
-    global previous_response
-    global memory
-    global wait
-
+    global memory, people_memory
+    global message_counter
+    global char_name
+    global sleeping
+    
     # No reply to itself
     if message.author == client.user:
         return
 
     # Generate a reply to user message
-    if message.channel.id == channelID and wait == False and message.content[0] != "!" and message.content != "" and message.content.startswith('<') == False and message.content.startswith('http') == False:
+    if message.channel.id == channelID and sleeping == False and message.content[0] != "!" and message.content != "" and message.content.startswith('<') == False and message.content.startswith('http') == False:
         # Clean the message content
         prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
         prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
         
-        # Generate response
+        # Generate rating on user
         response_text = generate_response(prompt, message.author.name)
+        message_counter += 1
+        if message_counter >= 20:
+            message_counter = 0
+            rating_response = generate_response(f"What would you rate the user {message.author.name} on a scale of 0 to 10", "SYSTEM")
+            print(rating_response)
+            # Remove SYSTEM and response from existance
+            memory.pop(-1)
+            memory.pop(-1)
+            rating_value = find_float_or_int(rating_response)
+
+            if rating_value != None:
+                people_memory[message.author.name] = rating_value
+                with open(f"./relations/{char_name}.json", "w") as outfile:
+                    json.dump(people_memory, outfile)
+
+        # Send response message
+        sleeping = True
+        await asyncio.sleep(1)
+        sleeping = False
         await message.channel.send(response_text, reference=message, mention_author=False)
 
+    elif sleeping == True and message.channel.id == channelID and message.content[0] != "!" and message.content != "" and message.content.startswith('<') == False and message.content.startswith('http') == False:
+        # Clean the message content
+        prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
+        prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
+        
+        memory.append(f"{message.author.name}: {prompt}")
+        while len(memory) > memory_length:
+            memory.pop(0) # remove oldest message if memory is full
+        
     # Clean up memory
     if message.content.startswith('!!!reset') and message.author.id == 837454923364827206:
         memory = []
@@ -215,8 +301,7 @@ async def on_message(message):
         match = re.search(r'\d+$', message.content)
         if match:
             number = int(match.group())
-            print(number)
-            change_personality(number)
+            await change_personality(number)
         else:
             print("No match")
     
@@ -227,6 +312,9 @@ async def on_message(message):
     
 @client.event
 async def on_ready():
+    global file_index
+    
     print(f'{client.user} has connected to Discord!')
+    await change_personality(file_index)
 
 client.run(bot_token)
