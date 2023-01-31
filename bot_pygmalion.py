@@ -6,6 +6,18 @@ from os import listdir
 from os.path import isfile, join
 import asyncio
 
+########################################################################
+# DISCORD BOT USING PYGMALION
+# use their google collab for api server
+########################################################################
+# TO DO:
+# 1. Put some functions in other py files for better readability
+# 2. fix change_nickname_with_personality setting
+# 3. some first messages will return ' ' when it shouldnt
+#   this breaks the character most of the time
+# 4. Images?
+########################################################################
+
 # Load words that will NOT be said
 
 word_list = []
@@ -45,12 +57,12 @@ intents = discord.Intents().all()
 client = discord.Client(intents=intents)
 client = commands.Bot(command_prefix='!!!', intents=intents)
 
-api_server = settings["api_server"]
-bot_token = settings["discord_token"]
-channelID = settings["channelID"]
-memory_length = settings["memory_length"]
-use_greeting = settings["use_greeting"]
-change_nickname_with_personality = settings["change_nickname_with_personality"]
+api_server = ""
+bot_token = ""
+channelID = 0
+memory_length = 50
+use_greeting = False
+change_nickname_with_personality = False
 
 memory = []
 people_memory = { "meanie":7.0 }
@@ -62,16 +74,16 @@ this_settings = {
     "use_memory": False,
     "use_authors_note": False,
     "use_world_info": False,
-    "max_context_length": settings["max_context_length"],
-    "max_length": settings["max_length"],
+    "max_context_length": 1600,
+    "max_length": 50,
     "rep_pen": 1.08,
     "rep_pen_range": 1024,
     "rep_pen_slope": 0.9,
-    "temperature": settings["temperature"],
+    "temperature": 1.0,
     "tfs": 0.9,
     "top_a": 0,
-    "top_k": settings["top_k"],
-    "top_p": settings["top_p"],
+    "top_k": 0,
+    "top_p": 0.9,
     "typical": 1,
     "sampler_order": sampler_order
 }
@@ -92,13 +104,53 @@ default_responses = [
 
 previous_response = None
 
-####################################
+########################################################################
+
+def load_settings():
+    global api_server, bot_token, channelID, memory_length, use_greeting, change_nickname_with_personality
+    global this_settings
+
+    with open(f"./settings.json", "r") as f:
+        settings = json.load(f)
+    
+    api_server = settings["api_server"]
+    api_server += "/api"
+    bot_token = settings["discord_token"]
+    channelID = settings["channelID"]
+    memory_length = settings["memory_length"]
+    use_greeting = settings["use_greeting"]
+    change_nickname_with_personality = settings["change_nickname_with_personality"]
+
+    this_settings = { 
+    "prompt": " ",
+    "use_story": False,
+    "use_memory": False,
+    "use_authors_note": False,
+    "use_world_info": False,
+    "max_context_length": settings["max_context_length"],
+    "max_length": settings["max_length"],
+    "rep_pen": 1.08,
+    "rep_pen_range": 1024,
+    "rep_pen_slope": 0.9,
+    "temperature": settings["temperature"],
+    "tfs": 0.9,
+    "top_a": 0,
+    "top_k": settings["top_k"],
+    "top_p": settings["top_p"],
+    "typical": 1,
+    "sampler_order": sampler_order
+}
+    
+load_settings()
+
+########################################################################
 
 async def send_message(text):
     global channelID, client
     channel = client.get_channel(channelID)
     await channel.send(text)
 
+########################################################################
 # Change personality
 
 async def change_personality(index):
@@ -148,7 +200,7 @@ async def change_personality(index):
         memory.append(char_greeting)
         await send_message(char_greeting)
 
-##############################
+########################################################################
 
 # For finding a rating about a user the bot returns
 def find_float_or_int(string):
@@ -157,12 +209,15 @@ def find_float_or_int(string):
         return float(match.group())
     else:
         return None
-
+    
+########################################################################
+    
 # Define a function to generate the response
 def generate_response(prompt, user):
     global previous_response
     global memory, people_memory
     global char_name
+    global api_server, this_settings, headers, word_list
 
     memory.append(f"{user}: {prompt}")
     while len(memory) > memory_length:
@@ -200,7 +255,7 @@ def generate_response(prompt, user):
             "data": this_settings,
             "headers": {"Content-Type": "application/json"}
         }
-
+    
     response = requests.post(api_server+"/v1/generate", json=this_settings, headers=headers)
 
     # Response code check
@@ -241,6 +296,8 @@ def generate_response(prompt, user):
     response_text = re.sub(r'"', '', response_text)
     previous_response = response_text
     return response_text
+
+########################################################################
 
 message_counter = 0
 sleeping = False
@@ -330,14 +387,22 @@ async def on_message(message):
         channelID = message.channel.id
         await message.channel.send(f'Channel has been set.')
 
+    if message.content.startswith('!!!reload') and message.author.id in admin_users:
+        load_settings()
+        await message.channel.send(f'Loaded settings')
+        
     if message.content.startswith('!!!help') and message.author.id in admin_users:
         print("My commands are reset, personality and random")
         
+########################################################################
+      
 @client.event
 async def on_ready():
     global file_index
     
     print(f'{client.user} has connected to Discord!')
     await change_personality(file_index)
+
+########################################################################
 
 client.run(bot_token)
