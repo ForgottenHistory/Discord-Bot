@@ -12,6 +12,11 @@ word_list = []
 with open('banned_words.txt', 'r') as file:
     word_list = file.readlines()
 
+admin_users = []
+with open('admin_users.txt', 'r') as file:
+    admin_users = file.readlines()
+    
+admin_users = [int(x.strip()) for x in admin_users]
 word_list = [x.strip() for x in word_list]
 #print(word_list)
 
@@ -45,17 +50,56 @@ bot_token = settings["discord_token"]
 channelID = settings["channelID"]
 memory_length = settings["memory_length"]
 use_greeting = settings["use_greeting"]
-sampler_order = [6,0,1,2,3,4,5]
+change_nickname_with_personality = settings["change_nickname_with_personality"]
 
 memory = []
 people_memory = { "meanie":7.0 }
 
-# Change personality
+sampler_order = [6,0,1,2,3,4,5]
+this_settings = { 
+    "prompt": " ",
+    "use_story": False,
+    "use_memory": False,
+    "use_authors_note": False,
+    "use_world_info": False,
+    "max_context_length": settings["max_context_length"],
+    "max_length": settings["max_length"],
+    "rep_pen": 1.08,
+    "rep_pen_range": 1024,
+    "rep_pen_slope": 0.9,
+    "temperature": settings["temperature"],
+    "tfs": 0.9,
+    "top_a": 0,
+    "top_k": settings["top_k"],
+    "top_p": settings["top_p"],
+    "typical": 1,
+    "sampler_order": sampler_order
+}
+
+# Misc values
+
+api_server += "/api"
+headers = {"Content-Type": "application/json"}
+
+print("Starting bot...")
+
+default_responses = [
+    "I'm not sure what you mean.",
+    "Can you please clarify?",
+    "Can you rephrase the question?",
+    "Sorry, I didn't understand that."
+]
+
+previous_response = None
+
+####################################
 
 async def send_message(text):
     global channelID, client
     channel = client.get_channel(channelID)
     await channel.send(text)
+
+# Change personality
 
 async def change_personality(index):
     global jsonFiles
@@ -66,6 +110,9 @@ async def change_personality(index):
     global people_memory
     global use_greeting
     global memory
+
+    if index > len(jsonFiles) or index < 0:
+        return
     
     with open(f"./json/{jsonFiles[index - 1]}", "r") as f:
         data = json.load(f)
@@ -96,45 +143,12 @@ async def change_personality(index):
              json.dump(people_memory, outfile)
     
     print(preprompt)
+    memory = []
     if use_greeting and char_greeting != None:
         memory.append(char_greeting)
         await send_message(char_greeting)
 
-this_settings = { 
-    "prompt": " ",
-    "use_story": False,
-    "use_memory": False,
-    "use_authors_note": False,
-    "use_world_info": False,
-    "max_context_length": 1613,
-    "max_length": 50,
-    "rep_pen": 1.08,
-    "rep_pen_range": 1024,
-    "rep_pen_slope": 0.9,
-    "temperature": 0.65,
-    "tfs": 0.9,
-    "top_a": 0,
-    "top_k": 0,
-    "top_p": 0.9,
-    "typical": 1,
-    "sampler_order": sampler_order
-}
-
-# Misc values
-
-api_server += "/api"
-headers = {"Content-Type": "application/json"}
-
-print("Starting bot...")
-
-default_responses = [
-    "I'm not sure what you mean.",
-    "Can you please clarify?",
-    "Can you rephrase the question?",
-    "Sorry, I didn't understand that."
-]
-
-previous_response = None
+##############################
 
 # For finding a rating about a user the bot returns
 def find_float_or_int(string):
@@ -237,6 +251,8 @@ async def on_message(message):
     global message_counter
     global char_name
     global sleeping
+    global change_nickname_with_personality
+    global admin_users
     
     # No reply to itself
     if message.author == client.user:
@@ -281,13 +297,13 @@ async def on_message(message):
             memory.pop(0) # remove oldest message if memory is full
         
     # Clean up memory
-    if message.content.startswith('!!!reset') and message.author.id == 837454923364827206:
+    if message.content.startswith('!!!reset') and message.author.id in admin_users:
         memory = []
         await message.channel.send("Emptied memory", reference=message, mention_author=False)
-
+        
     # Randomize generation variables
-    if message.content.startswith('!!!random') and message.author.id == 837454923364827206:
-        temperature = round(random.uniform(0.6,1.4),2)
+    if message.content.startswith('!!!random') and message.author.id in admin_users:
+        temperature = round(random.uniform(0.6,2),2)
         top_k = random.randint(0, 40)
         #top_p = round(random.uniform(0.5,5.0),2)
 
@@ -297,19 +313,26 @@ async def on_message(message):
         print(string)
         await message.channel.send(string, reference=message, mention_author=False)
 
-    if message.content.startswith('!!!personality') and message.author.id == 837454923364827206:
+    if message.content.startswith('!!!personality') and message.author.id in admin_users:
         match = re.search(r'\d+$', message.content)
         if match:
             number = int(match.group())
             await change_personality(number)
+            if change_nickname_with_personality:
+                server = message.guild
+                await server.me.edit(nick=char_name)
         else:
             print("No match")
+            await message.channel.send(f'I have {len(jsonFiles)} personalities')
     
     # Change active channel
-    if message.content.startswith('!!!channel') and message.author.id == 837454923364827206:
+    if message.content.startswith('!!!channel') and message.author.id in admin_users:
         channelID = message.channel.id
         await message.channel.send(f'Channel has been set.')
-    
+
+    if message.content.startswith('!!!help') and message.author.id in admin_users:
+        print("My commands are reset, personality and random")
+        
 @client.event
 async def on_ready():
     global file_index

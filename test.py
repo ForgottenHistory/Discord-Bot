@@ -1,13 +1,9 @@
-import json
+admin_users = []
+with open('admin_users.txt', 'r') as file:
+    admin_users = file.readlines()
 
-# Load the json file
-print("Json to load?")
-fileToLoad = input()
-with open(f"./json/{fileToLoad}.json", "r") as f:
-    data = json.load(f)
 
-# Access the values
-char_name = data["char_name"]
-char_persona = data["char_persona"]
-print(char_name)
-print(char_persona)
+admin_users = [line.strip() for line in admin_users]
+
+print(admin_users)
+x = input()
