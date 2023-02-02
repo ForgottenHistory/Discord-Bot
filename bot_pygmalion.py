@@ -61,6 +61,7 @@ api_server = ""
 bot_token = ""
 channelID = 0
 memory_length = 50
+message_cooldown = 1
 use_greeting = False
 change_nickname_with_personality = False
 
@@ -108,7 +109,7 @@ previous_response = None
 
 def load_settings():
     global api_server, bot_token, channelID, memory_length, use_greeting, change_nickname_with_personality
-    global this_settings
+    global this_settings, message_cooldown
 
     with open(f"./settings.json", "r") as f:
         settings = json.load(f)
@@ -119,6 +120,7 @@ def load_settings():
     channelID = settings["channelID"]
     memory_length = settings["memory_length"]
     use_greeting = settings["use_greeting"]
+    message_cooldown = settings["message_cooldown"]
     change_nickname_with_personality = settings["change_nickname_with_personality"]
 
     this_settings = { 
@@ -309,7 +311,8 @@ async def on_message(message):
     global char_name
     global sleeping
     global change_nickname_with_personality
-    global admin_users
+    global admin_users, message_cooldown
+    global this_settings
     
     # No reply to itself
     if message.author == client.user:
@@ -340,7 +343,7 @@ async def on_message(message):
 
         # Send response message
         sleeping = True
-        await asyncio.sleep(1)
+        await asyncio.sleep(message_cooldown)
         sleeping = False
         await message.channel.send(response_text, reference=message, mention_author=False)
 
@@ -354,12 +357,12 @@ async def on_message(message):
             memory.pop(0) # remove oldest message if memory is full
         
     # Clean up memory
-    if message.content.startswith('!!!reset') and message.author.id in admin_users:
+    if message.content.startswith('!!reset') and message.author.id in admin_users:
         memory = []
         await message.channel.send("Emptied memory", reference=message, mention_author=False)
         
     # Randomize generation variables
-    if message.content.startswith('!!!random') and message.author.id in admin_users:
+    if message.content.startswith('!!random') and message.author.id in admin_users:
         temperature = round(random.uniform(0.6,2),2)
         top_k = random.randint(0, 40)
         #top_p = round(random.uniform(0.5,5.0),2)
@@ -370,7 +373,7 @@ async def on_message(message):
         print(string)
         await message.channel.send(string, reference=message, mention_author=False)
 
-    if message.content.startswith('!!!personality') and message.author.id in admin_users:
+    if message.content.startswith('!!personality') and message.author.id in admin_users:
         match = re.search(r'\d+$', message.content)
         if match:
             number = int(match.group())
@@ -381,18 +384,38 @@ async def on_message(message):
         else:
             print("No match")
             await message.channel.send(f'I have {len(jsonFiles)} personalities')
+
+    if message.content.startswith('!!temperature') and message.author.id in admin_users:
+        match = re.search(r"[-+]?(?:\d*\.*\d+)", message.content)
+        if match:
+            number = float(match.group())
+            this_settings["temperature"] = number
+            await message.channel.send(f'Changed temperature')
+        else:
+            print("No match")
+            await message.channel.send(f'Invalid input')
+    if message.content.startswith('!!top_k') and message.author.id in admin_users:
+        match = re.search(r"[-+]?(?:\d*\.*\d+)", message.content)
+        if match:
+            number = float(match.group())
+            this_settings["top_k"] = number
+            await message.channel.send(f'Changed top_k')
+        else:
+            print("No match")
+            await message.channel.send(f'Invalid input')
+
     
     # Change active channel
-    if message.content.startswith('!!!channel') and message.author.id in admin_users:
+    if message.content.startswith('!!channel') and message.author.id in admin_users:
         channelID = message.channel.id
         await message.channel.send(f'Channel has been set.')
 
-    if message.content.startswith('!!!reload') and message.author.id in admin_users:
+    if message.content.startswith('!!reload') and message.author.id in admin_users:
         load_settings()
         await message.channel.send(f'Loaded settings')
         
-    if message.content.startswith('!!!help') and message.author.id in admin_users:
-        print("My commands are reset, personality and random")
+    if message.content.startswith('!!help') and message.author.id in admin_users:
+        print("My commands are reset, personality, temperature, top_k, reload and random")
         
 ########################################################################
       
