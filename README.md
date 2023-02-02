@@ -1,3 +1,2 @@
 # Discord Bot
- A discord bot using language learning
- V3 uses requests
+ A discord bot using language learning and pygmalion. Check their discord https://discord.gg/pygmalionai
