@@ -5,17 +5,22 @@ import json
 from os import listdir
 from os.path import isfile, join
 import asyncio
+import sys
+sys.path.append('E:/Coding/Discord-Bot')
+import func.fix_relations
+import func.find_float_or_int
+import func.check_response_text
 
 ########################################################################
 # DISCORD BOT USING PYGMALION
-# use their google collab for api server
+# use their google collab for api server (or run locally)
 ########################################################################
 # TO DO:
 # 1. Put some functions in other py files for better readability
 # 2. fix change_nickname_with_personality setting
 # 3. some first messages will return ' ' when it shouldnt
-#   this breaks the character most of the time
-# 4. Images?
+#    this breaks the character most of the time
+# 4. Memory keywords: Link a keyword to a specific saved string, load when appropriate
 ########################################################################
 
 # Load words that will NOT be said
@@ -95,13 +100,6 @@ api_server += "/api"
 headers = {"Content-Type": "application/json"}
 
 print("Starting bot...")
-
-default_responses = [
-    "I'm not sure what you mean.",
-    "Can you please clarify?",
-    "Can you rephrase the question?",
-    "Sorry, I didn't understand that."
-]
 
 previous_response = None
 
@@ -186,7 +184,9 @@ async def change_personality(index):
     example_dialogue = data.get("example_dialogue", None)
     world_scenario = data.get("world_scenario", None)
     
-    preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\nScenario: {world_scenario}"
+    #preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\nScenario: {world_scenario}"
+    #preprompt = f"{char_persona}\n<START>\n{char_name}: {world_scenario}"
+    preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\n<START>\n{char_name}: {world_scenario}"
     if isfile(f"./relations/{char_name}.json"):
         with open(f"./relations/{char_name}.json", "r") as f:
             people_memory = json.load(f)
@@ -201,58 +201,46 @@ async def change_personality(index):
     if use_greeting and char_greeting != None:
         memory.append(char_greeting)
         await send_message(char_greeting)
-
+    
 ########################################################################
 
-# For finding a rating about a user the bot returns
-def find_float_or_int(string):
-    match = re.search("[-+]?\d*\.\d+|\d+", string)
-    if match:
-        return float(match.group())
+def check_response_error(response):
+    code = response.status_code
+    # Response code check
+    if code == 200:
+        print(' ')
+        #print('Valid response')
+    elif code == 422:
+        print('Validation error')
+    elif code in [501, 503, 507]:
+        print(response.json())
     else:
-        return None
-    
-########################################################################
-    
-# Define a function to generate the response
+        print("something went wrong on the request")
+
+########################################################################     
+# Generate the response
+
 def generate_response(prompt, user):
     global previous_response
     global memory, people_memory
     global char_name
     global api_server, this_settings, headers, word_list
-
-    memory.append(f"{user}: {prompt}")
+    
+    if len(memory) == 0 or memory[-1] != f"{user}: {prompt}":
+        memory.append(f"{user}: {prompt}")
     while len(memory) > memory_length:
         memory.pop(0) # remove oldest message if memory is full
 
-    # Add relationships
-    prepromt_fixed = preprompt
-    relations = "Relations("
-    for person in people_memory:
-        value = people_memory[person]
-        if value >= 5.5 and value < 9.5:
-            relations += f"\"You like {person}\"+"
-        elif value >= 9.5:
-            relations += f"\"You love {person}\"+"
-        elif value > 2.0 and value <= 4.5:
-            relations += f"\"You dislike {person}\"+"
-        elif value <= 2.0:
-            relations += f"\"You hate {person}\"+"
+    prepromt_fixed = func.fix_relations.fix_relations(preprompt, people_memory)
 
-    relations = relations[:-1] + ")"
-    
-    # Find the index of the closing curly bracket
-    index = prepromt_fixed.find("}")
-
-    # Insert the relations before the closing bracket
-    prepromt_fixed = prepromt_fixed[:index] + f"{relations}" + prepromt_fixed[index:]
+    ###################################################################
     
     # Concatenate the most recent messages in memory to use as the prompt
-    prompt = prepromt_fixed + "\n"
-    prompt += "\n".join(f"{mem}" for mem in memory) + f"\n{char_name}: "
-    #print(f"\n" + prompt)
+    new_prompt = prepromt_fixed + "\n"
+    new_prompt += "\n".join(f"{mem}" for mem in memory) + f"\n{char_name}: "
+    print(f"\n" + new_prompt)
     
-    this_settings["prompt"] = prompt
+    this_settings["prompt"] = new_prompt
     args = {
             "data": this_settings,
             "headers": {"Content-Type": "application/json"}
@@ -261,39 +249,41 @@ def generate_response(prompt, user):
     response = requests.post(api_server+"/v1/generate", json=this_settings, headers=headers)
 
     # Response code check
-    if response.status_code == 200:
-        print(' ')
-        #print('Valid response')
-    elif response.status_code == 422:
-        print('Validation error')
-    elif response.status_code in [501, 503, 507]:
-        print(response.json())
-    else:
-        print("something went wrong on the request")
-
+    check_response_error(response)
+    
+    ###################################################################
+    # To fix empty responses I messed around here and now I'm kinda lost what I did
+    # Kobold's chat mode setting with this setup works, most of the time
+    # Wtf is this wizardry
+    
     # Clean up response
     response_text = response.json()['results'][0]['text']
     response_lines = response_text.split("\n")
-    print(response_lines)
+    print("Character name: " + char_name)
+    print(f"Response lines: \n" + str(response_lines))
     for x in range(0, len(response_lines)):
-        if response_lines[x].split(":")[-1] != '':
+        print("Response: " + response_lines[x])
+        print("Split: " + response_lines[x].split(":")[-1])
+        print("Splitted: " + str(response_lines[x].split(":")[0]))
+        if response_lines[x].split(":")[-1] != '' and response_lines[x].split(":")[0] == char_name:
             response_text = response_lines[x].split(":")[-1]
             break
+        
+    if response_lines[0].split(":")[-1] == '':
+        response_text = generate_response(prompt, user)
+    else:
+        response_text = response_lines[0].split(":")[-1]
 
+    ###################################################################
     # Replace bad words
+    
     for word in word_list:
         response_text = response_text.replace(word, "%%%%")
 
+    ###################################################################
     # Check if response text is not correct
     # Sends a default response if no
-    if response_text == "":
-        response_text = random.choice(default_responses)
-    elif response_text == prompt:
-        response_text = random.choice(default_responses)
-    elif response_text == previous_response:
-        response_text = random.choice(default_responses)
-    else:
-        memory.append(f"{char_name}: " + response_text)
+    func.check_response_text.check_response_text(prompt, response_text, previous_response, char_name, memory)
 
     response_text = re.sub(r'"', '', response_text)
     previous_response = response_text
@@ -322,7 +312,7 @@ async def on_message(message):
     if message.channel.id == channelID and sleeping == False and message.content[0] != "!" and message.content != "" and message.content.startswith('<') == False and message.content.startswith('http') == False:
         # Clean the message content
         prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
-        prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
+        #prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
         
         # Generate rating on user
         response_text = generate_response(prompt, message.author.name)
@@ -334,7 +324,7 @@ async def on_message(message):
             # Remove SYSTEM and response from existance
             memory.pop(-1)
             memory.pop(-1)
-            rating_value = find_float_or_int(rating_response)
+            rating_value = func.find_float_or_int.find_float_or_int(rating_response)
 
             if rating_value != None:
                 people_memory[message.author.name] = rating_value
