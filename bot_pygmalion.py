@@ -2,6 +2,7 @@ import discord, re, random
 from discord.ext import commands
 import requests
 import json
+import os
 from os import listdir
 from os.path import isfile, join
 import asyncio
@@ -10,6 +11,12 @@ sys.path.append('E:/Coding/Discord-Bot')
 import func.fix_relations
 import func.find_float_or_int
 import func.check_response_text
+
+#Part-of-Speech (POS)
+import nltk
+
+#Named Entity Recognition (NER)
+from nltk import word_tokenize, pos_tag, ne_chunk
 
 ########################################################################
 # DISCORD BOT USING PYGMALION
@@ -22,6 +29,9 @@ import func.check_response_text
 #    this breaks the character most of the time
 # 4. Memory keywords: Link a keyword to a specific saved string, load when appropriate
 ########################################################################
+
+if not os.path.exists("./downloads"):
+    os.makedirs("./downloads")
 
 # Load words that will NOT be said
 
@@ -62,14 +72,6 @@ intents = discord.Intents().all()
 client = discord.Client(intents=intents)
 client = commands.Bot(command_prefix='!!!', intents=intents)
 
-api_server = ""
-bot_token = ""
-channelID = 0
-memory_length = 50
-message_cooldown = 1
-use_greeting = False
-change_nickname_with_personality = False
-
 memory = []
 people_memory = { "meanie":7.0 }
 
@@ -94,32 +96,24 @@ this_settings = {
     "sampler_order": sampler_order
 }
 
-# Misc values
-
-api_server += "/api"
-headers = {"Content-Type": "application/json"}
-
 print("Starting bot...")
 
 previous_response = None
 
 ########################################################################
 
-def load_settings():
-    global api_server, bot_token, channelID, memory_length, use_greeting, change_nickname_with_personality
-    global this_settings, message_cooldown
+def extract_keywords_POS(text):
+    tokens = nltk.word_tokenize(text)
+    pos_tagged_tokens = nltk.pos_tag(tokens)
+    keywords = [word for word, pos in pos_tagged_tokens if pos in ['NN', 'JJ']]
+    return keywords
 
+########################################################################
+
+def load_settings():
+    global settings
     with open(f"./settings.json", "r") as f:
         settings = json.load(f)
-    
-    api_server = settings["api_server"]
-    api_server += "/api"
-    bot_token = settings["discord_token"]
-    channelID = settings["channelID"]
-    memory_length = settings["memory_length"]
-    use_greeting = settings["use_greeting"]
-    message_cooldown = settings["message_cooldown"]
-    change_nickname_with_personality = settings["change_nickname_with_personality"]
 
     this_settings = { 
     "prompt": " ",
@@ -140,14 +134,15 @@ def load_settings():
     "typical": 1,
     "sampler_order": sampler_order
 }
+    settings["this_settings"] = this_settings
     
 load_settings()
 
 ########################################################################
 
 async def send_message(text):
-    global channelID, client
-    channel = client.get_channel(channelID)
+    global settings, client
+    channel = client.get_channel(settings["channelID"])
     await channel.send(text)
 
 ########################################################################
@@ -156,12 +151,10 @@ async def send_message(text):
 async def change_personality(index):
     global jsonFiles
     global jsonFilePath
-    global this_settings
     global preprompt
-    global char_name
     global people_memory
-    global use_greeting
     global memory
+    global settings
 
     if index > len(jsonFiles) or index < 0:
         return
@@ -169,7 +162,7 @@ async def change_personality(index):
     with open(f"./json/{jsonFiles[index - 1]}", "r") as f:
         data = json.load(f)
     # Access the values
-    char_name = data["char_name"]
+    settings["char_name"] = data["char_name"]
     char_persona = data["char_persona"]
     char_greeting = data.get("char_greeting", None)
     if char_greeting == None:
@@ -198,8 +191,8 @@ async def change_personality(index):
     
     print(preprompt)
     memory = []
-    if use_greeting and char_greeting != None:
-        memory.append(char_greeting)
+    memory.append(char_greeting)
+    if settings["use_greeting"] and char_greeting != None:
         await send_message(char_greeting)
     
 ########################################################################
@@ -223,12 +216,14 @@ def check_response_error(response):
 def generate_response(prompt, user):
     global previous_response
     global memory, people_memory
-    global char_name
-    global api_server, this_settings, headers, word_list
+    global settings
+    global word_list
+
+    char_name = settings["char_name"]
     
     if len(memory) == 0 or memory[-1] != f"{user}: {prompt}":
         memory.append(f"{user}: {prompt}")
-    while len(memory) > memory_length:
+    while len(memory) > settings["memory_length"]:
         memory.pop(0) # remove oldest message if memory is full
 
     prepromt_fixed = func.fix_relations.fix_relations(preprompt, people_memory)
@@ -238,15 +233,16 @@ def generate_response(prompt, user):
     # Concatenate the most recent messages in memory to use as the prompt
     new_prompt = prepromt_fixed + "\n"
     new_prompt += "\n".join(f"{mem}" for mem in memory) + f"\n{char_name}: "
-    print(f"\n" + new_prompt)
+    #print(f"\n" + new_prompt)
     
     this_settings["prompt"] = new_prompt
     args = {
             "data": this_settings,
             "headers": {"Content-Type": "application/json"}
         }
-    
-    response = requests.post(api_server+"/v1/generate", json=this_settings, headers=headers)
+
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(settings["api_server"]+"/api/v1/generate", json=this_settings, headers=headers)
 
     # Response code check
     check_response_error(response)
@@ -259,13 +255,13 @@ def generate_response(prompt, user):
     # Clean up response
     response_text = response.json()['results'][0]['text']
     response_lines = response_text.split("\n")
-    print("Character name: " + char_name)
-    print(f"Response lines: \n" + str(response_lines))
+    #print("Character name: " + char_name)
+    #print(f"Response lines: \n" + str(response_lines))
     for x in range(0, len(response_lines)):
-        print("Response: " + response_lines[x])
-        print("Split: " + response_lines[x].split(":")[-1])
-        print("Splitted: " + str(response_lines[x].split(":")[0]))
-        if response_lines[x].split(":")[-1] != '' and response_lines[x].split(":")[0] == char_name:
+        #print("Response: " + response_lines[x])
+        #print("Split: " + response_lines[x].split(":")[-1])
+        #print("Splitted: " + str(response_lines[x].split(":")[0]))
+        if response_lines[x].split(":")[-1] != '': #and response_lines[x].split(":")[0] == char_name:
             response_text = response_lines[x].split(":")[-1]
             break
         
@@ -295,14 +291,13 @@ message_counter = 0
 sleeping = False
 @client.event
 async def on_message(message):
-    global channelID
     global memory, people_memory
     global message_counter
-    global char_name
     global sleeping
-    global change_nickname_with_personality
-    global admin_users, message_cooldown
+    global admin_users
     global this_settings
+
+    channelID = settings["channelID"]
     
     # No reply to itself
     if message.author == client.user:
@@ -333,10 +328,13 @@ async def on_message(message):
 
         # Send response message
         sleeping = True
-        await asyncio.sleep(message_cooldown)
+        await asyncio.sleep(settings["message_cooldown"])
         sleeping = False
         await message.channel.send(response_text, reference=message, mention_author=False)
 
+    ########################################################################
+    # If sleeping add user message to memory without sending a response
+    
     elif sleeping == True and message.channel.id == channelID and message.content[0] != "!" and message.content != "" and message.content.startswith('<') == False and message.content.startswith('http') == False:
         # Clean the message content
         prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
@@ -345,67 +343,72 @@ async def on_message(message):
         memory.append(f"{message.author.name}: {prompt}")
         while len(memory) > memory_length:
             memory.pop(0) # remove oldest message if memory is full
-        
-    # Clean up memory
-    if message.content.startswith('!!reset') and message.author.id in admin_users:
-        memory = []
-        await message.channel.send("Emptied memory", reference=message, mention_author=False)
-        
-    # Randomize generation variables
-    if message.content.startswith('!!random') and message.author.id in admin_users:
-        temperature = round(random.uniform(0.6,2),2)
-        top_k = random.randint(0, 40)
-        #top_p = round(random.uniform(0.5,5.0),2)
-
-        this_settings["temperature"] = temperature
-        this_settings["top_k"] = top_k
-        string = f"Temperature: {temperature} TopK: {top_k}"
-        print(string)
-        await message.channel.send(string, reference=message, mention_author=False)
-
-    if message.content.startswith('!!personality') and message.author.id in admin_users:
-        match = re.search(r'\d+$', message.content)
-        if match:
-            number = int(match.group())
-            await change_personality(number)
-            if change_nickname_with_personality:
-                server = message.guild
-                await server.me.edit(nick=char_name)
-        else:
-            print("No match")
-            await message.channel.send(f'I have {len(jsonFiles)} personalities')
-
-    if message.content.startswith('!!temperature') and message.author.id in admin_users:
-        match = re.search(r"[-+]?(?:\d*\.*\d+)", message.content)
-        if match:
-            number = float(match.group())
-            this_settings["temperature"] = number
-            await message.channel.send(f'Changed temperature')
-        else:
-            print("No match")
-            await message.channel.send(f'Invalid input')
-    if message.content.startswith('!!top_k') and message.author.id in admin_users:
-        match = re.search(r"[-+]?(?:\d*\.*\d+)", message.content)
-        if match:
-            number = float(match.group())
-            this_settings["top_k"] = number
-            await message.channel.send(f'Changed top_k')
-        else:
-            print("No match")
-            await message.channel.send(f'Invalid input')
-
     
-    # Change active channel
-    if message.content.startswith('!!channel') and message.author.id in admin_users:
-        channelID = message.channel.id
-        await message.channel.send(f'Channel has been set.')
+    ########################################################################
+    # ADMIN COMMANDS
 
-    if message.content.startswith('!!reload') and message.author.id in admin_users:
-        load_settings()
-        await message.channel.send(f'Loaded settings')
+    if message.author.id in admin_users:
+
+        # Clean memory
+        if message.content.startswith('!!reset'):
+            memory = []
+            await message.channel.send("Emptied memory", reference=message, mention_author=False)
+            
+        # Randomize generation variables
+        if message.content.startswith('!!random'):
+            temperature = round(random.uniform(0.6,2),2)
+            top_k = random.randint(0, 40)
+            #top_p = round(random.uniform(0.5,5.0),2)
+
+            this_settings["temperature"] = temperature
+            this_settings["top_k"] = top_k
+            string = f"Temperature: {temperature} TopK: {top_k}"
+            print(string)
+            await message.channel.send(string, reference=message, mention_author=False)
+
+        if message.content.startswith('!!personality'):
+            match = re.search(r'\d+$', message.content)
+            if match:
+                number = int(match.group())
+                await change_personality(number)
+                if change_nickname_with_personality:
+                    server = message.guild
+                    await server.me.edit(nick=char_name)
+            else:
+                print("No match")
+                await message.channel.send(f'I have {len(jsonFiles)} personalities')
+
+        if message.content.startswith('!!temperature'):
+            match = re.search(r"[-+]?(?:\d*\.*\d+)", message.content)
+            if match:
+                number = float(match.group())
+                this_settings["temperature"] = number
+                await message.channel.send(f'Changed temperature')
+            else:
+                print("No match")
+                await message.channel.send(f'Invalid input')
+        if message.content.startswith('!!top_k'):
+            match = re.search(r"[-+]?(?:\d*\.*\d+)", message.content)
+            if match:
+                number = float(match.group())
+                this_settings["top_k"] = number
+                await message.channel.send(f'Changed top_k')
+            else:
+                print("No match")
+                await message.channel.send(f'Invalid input')
+
         
-    if message.content.startswith('!!help') and message.author.id in admin_users:
-        print("My commands are reset, personality, temperature, top_k, reload and random")
+        # Change active channel
+        if message.content.startswith('!!channel'):
+            channelID = message.channel.id
+            await message.channel.send(f'Channel has been set.')
+
+        if message.content.startswith('!!reload'):
+            load_settings()
+            await message.channel.send(f'Loaded settings')
+            
+        if message.content.startswith('!!help'):
+            print("My commands are reset, personality, temperature, top_k, reload and random")
         
 ########################################################################
       
@@ -418,4 +421,4 @@ async def on_ready():
 
 ########################################################################
 
-client.run(bot_token)
+client.run(settings["discord_token"])
