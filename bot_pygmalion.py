@@ -18,6 +18,11 @@ import nltk
 #Named Entity Recognition (NER)
 from nltk import word_tokenize, pos_tag, ne_chunk
 
+#stable diffusion local
+from PIL import Image, PngImagePlugin
+import io
+import base64
+
 ########################################################################
 # DISCORD BOT USING PYGMALION
 # use their google collab for api server (or run locally)
@@ -32,6 +37,9 @@ from nltk import word_tokenize, pos_tag, ne_chunk
 
 if not os.path.exists("./downloads"):
     os.makedirs("./downloads")
+
+if not os.path.exists("./generated_images"):
+    os.makedirs("./generated_images")
 
 # Load words that will NOT be said
 
@@ -74,6 +82,8 @@ client = commands.Bot(command_prefix='!!!', intents=intents)
 
 memory = []
 people_memory = { "meanie":7.0 }
+message_counter = 0
+sleeping = False
 
 sampler_order = [6,0,1,2,3,4,5]
 this_settings = { 
@@ -137,6 +147,40 @@ def load_settings():
     settings["this_settings"] = this_settings
     
 load_settings()
+
+########################################################################
+
+def generate_image(prompt):
+    url = "http://127.0.0.1:7860"
+
+    payload = {
+        "prompt": prompt,
+        "steps": 15,
+        "width": 768,
+        "height": 768
+    }
+
+    response = requests.post(url=f'{url}/sdapi/v1/txt2img', json=payload)
+
+    r = response.json()
+
+    for i in r['images']:
+        image = Image.open(io.BytesIO(base64.b64decode(i.split(",",1)[0])))
+
+        png_payload = {
+            "image": "data:image/png;base64," + i
+        }
+        response2 = requests.post(url=f'{url}/sdapi/v1/png-info', json=png_payload)
+
+        pnginfo = PngImagePlugin.PngInfo()
+        pnginfo.add_text("parameters", response2.json().get("info"))
+
+        save_path = "./generated_images/"
+        files = os.listdir(save_path)
+        num_files = len(files)
+
+        image.save(f"{save_path}output{num_files+1}.png", pnginfo=pnginfo)
+        return f"{save_path}output{num_files+1}.png"
 
 ########################################################################
 
@@ -255,8 +299,8 @@ def generate_response(prompt, user):
     # Clean up response
     response_text = response.json()['results'][0]['text']
     response_lines = response_text.split("\n")
-    #print("Character name: " + char_name)
-    #print(f"Response lines: \n" + str(response_lines))
+    print("Character name: " + char_name)
+    print(f"Response lines: \n" + str(response_lines))
     for x in range(0, len(response_lines)):
         #print("Response: " + response_lines[x])
         #print("Split: " + response_lines[x].split(":")[-1])
@@ -264,12 +308,10 @@ def generate_response(prompt, user):
         if response_lines[x].split(":")[-1] != '': #and response_lines[x].split(":")[0] == char_name:
             response_text = response_lines[x].split(":")[-1]
             break
-        
-    if response_lines[0].split(":")[-1] == '':
-        response_text = generate_response(prompt, user)
-    else:
-        response_text = response_lines[0].split(":")[-1]
 
+    if response_lines[x].split(":")[-1] == '':
+        response_text = generate_response(prompt, user)
+    
     ###################################################################
     # Replace bad words
     
@@ -287,15 +329,111 @@ def generate_response(prompt, user):
 
 ########################################################################
 
-message_counter = 0
-sleeping = False
+async def reply_to_message(message):
+    global sleeping
+    global message_counter
+    global memory, people_memory
+    global settings
+    
+    # Clean the message content
+    prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
+    #prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
+        
+    # Generate rating on user
+    response_text = generate_response(prompt, message.author.name)
+    message_counter += 1
+    if message_counter >= 20:
+        message_counter = 0
+        rating_response = generate_response(f"What would you rate the user {message.author.name} on a scale of 0 to 10", "SYSTEM")
+        print(rating_response)
+        # Remove SYSTEM and response from existance
+        memory.pop(-1)
+        memory.pop(-1)
+        rating_value = func.find_float_or_int.find_float_or_int(rating_response)
+
+        if rating_value != None:
+            people_memory[message.author.name] = rating_value
+            char_name = settings["char_name"]
+            with open(f"./relations/{char_name}.json", "w") as outfile:
+                json.dump(people_memory, outfile)
+
+    # Send response message
+    sleeping = True
+    await asyncio.sleep(settings["message_cooldown"])
+    sleeping = False
+    await message.channel.send(response_text, reference=message, mention_author=False)
+
+async def reply_with_gif(message):
+    global settings
+
+    reply = generate_response(f"\"{message.content}\" react to this message", "SYSTEM")
+    memory.pop(-1)
+        
+    keywords = extract_keywords_POS(reply)
+    if len(keywords) == 0:
+        await reply_to_message(message)
+        return
+    
+    print(keywords)
+
+    string = ""
+    counter = 0
+
+    for word in keywords:
+        string += f"{word} "
+        counter += 1
+        if counter >= 3:
+            break
+
+    api_key = settings["tenor_api_key"]
+    client_key = "discord_bot"
+    url = f"https://tenor.googleapis.com/v2/search?q={string}&key={api_key}&client_key={client_key}&limit={1}"
+    
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        gifs = json.loads(response.content)
+        url = gifs["results"][0]["media_formats"]["gif"]["url"]
+        print("Sent " + url)
+        embed = discord.Embed()
+        embed.url = url
+        embed.set_image(url=url)
+        await message.channel.send(f"{reply}\n {url}", reference=message, mention_author=False)
+    else:
+        print("Error")
+
+async def reply_with_generated_image(message):
+    global settings
+
+    reply = generate_response(message.content, message.author.name)
+    memory.pop(-1)
+    #print(memory)
+    image_file = generate_image(message.content + reply)
+    print(image_file)
+    await message.channel.send(f"{reply}", file=discord.File(image_file), reference=message, mention_author=False)
+
+def add_message_to_memory(message):
+    global memory
+    global settings
+    
+    # Clean the message content
+    prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
+    prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
+        
+    memory.append(f"{message.author.name}: {prompt}")
+    while len(memory) > settings["memory_length"]:
+        memory.pop(0) # remove oldest message if memory is full
+
+    
+########################################################################
+
 @client.event
 async def on_message(message):
     global memory, people_memory
     global message_counter
     global sleeping
     global admin_users
-    global this_settings
+    global settings
 
     channelID = settings["channelID"]
     
@@ -305,45 +443,28 @@ async def on_message(message):
 
     # Generate a reply to user message
     if message.channel.id == channelID and sleeping == False and message.content[0] != "!" and message.content != "" and message.content.startswith('<') == False and message.content.startswith('http') == False:
-        # Clean the message content
-        prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
-        #prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
+        send_gif_roll = random.uniform(0, 1)
+        send_image_roll = random.uniform(0, 1)
+
+        if "make an image" in message.content:
+            send_image_roll = 1.1
+            send_gif_roll = 0.0
         
-        # Generate rating on user
-        response_text = generate_response(prompt, message.author.name)
-        message_counter += 1
-        if message_counter >= 20:
-            message_counter = 0
-            rating_response = generate_response(f"What would you rate the user {message.author.name} on a scale of 0 to 10", "SYSTEM")
-            print(rating_response)
-            # Remove SYSTEM and response from existance
-            memory.pop(-1)
-            memory.pop(-1)
-            rating_value = func.find_float_or_int.find_float_or_int(rating_response)
-
-            if rating_value != None:
-                people_memory[message.author.name] = rating_value
-                with open(f"./relations/{char_name}.json", "w") as outfile:
-                    json.dump(people_memory, outfile)
-
-        # Send response message
-        sleeping = True
-        await asyncio.sleep(settings["message_cooldown"])
-        sleeping = False
-        await message.channel.send(response_text, reference=message, mention_author=False)
+        if send_gif_roll > settings["gif_rate"] and settings["use_gifs"] == True:
+            add_message_to_memory(message)
+            await reply_with_gif(message)
+        elif send_image_roll > settings["image_rate"]and settings["use_images"] == True:
+            add_message_to_memory(message)
+            await reply_with_generated_image(message)
+        else:
+            await reply_to_message(message)
 
     ########################################################################
     # If sleeping add user message to memory without sending a response
     
     elif sleeping == True and message.channel.id == channelID and message.content[0] != "!" and message.content != "" and message.content.startswith('<') == False and message.content.startswith('http') == False:
-        # Clean the message content
-        prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
-        prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
-        
-        memory.append(f"{message.author.name}: {prompt}")
-        while len(memory) > memory_length:
-            memory.pop(0) # remove oldest message if memory is full
-    
+        add_message_to_memory(message)
+
     ########################################################################
     # ADMIN COMMANDS
 
@@ -373,7 +494,7 @@ async def on_message(message):
                 await change_personality(number)
                 if change_nickname_with_personality:
                     server = message.guild
-                    await server.me.edit(nick=char_name)
+                    await server.me.edit(nick=settings["char_name"])
             else:
                 print("No match")
                 await message.channel.send(f'I have {len(jsonFiles)} personalities')
