@@ -228,9 +228,18 @@ async def change_personality(index):
     example_dialogue = data.get("example_dialogue", None)
     world_scenario = data.get("world_scenario", None)
     
-    #preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\nScenario: {world_scenario}"
-    #preprompt = f"{char_persona}\n<START>\n{char_name}: {world_scenario}"
-    preprompt = f"{char_persona} \nExample dialogue: {example_dialogue}\n<START>\n{char_name}: {world_scenario}"
+    preprompt = f"{char_persona}"
+    if example_dialogue is not None:
+        preprompt +=  f"\nExample dialogue: {example_dialogue}" 
+    if world_scenario is not None and world_scenario != "":
+        preprompt += f"\n<START>\n{char_name}: {world_scenario}"
+    
+    memory = []
+    if preprompt.endswith("<START>") == False:
+        memory.append("<START>")
+    if char_greeting is not None:
+        memory.append(char_greeting)
+        
     if isfile(f"./relations/{char_name}.json"):
         with open(f"./relations/{char_name}.json", "r") as f:
             people_memory = json.load(f)
@@ -241,8 +250,6 @@ async def change_personality(index):
              json.dump(people_memory, outfile)
     
     print(preprompt)
-    memory = []
-    memory.append(char_greeting)
     if settings["use_greeting"] and char_greeting != None:
         await send_message(char_greeting)
     
@@ -271,7 +278,8 @@ def generate_response(prompt, user):
     global word_list
 
     char_name = settings["char_name"]
-    
+
+    print(memory)
     if len(memory) == 0 or memory[-1] != f"{user}: {prompt}":
         memory.append(f"{user}: {prompt}")
     while len(memory) > settings["memory_length"]:
@@ -299,25 +307,20 @@ def generate_response(prompt, user):
     check_response_error(response)
     
     ###################################################################
-    # To fix empty responses I messed around here and now I'm kinda lost what I did
-    # Kobold's chat mode setting with this setup works, most of the time
-    # Wtf is this wizardry
     
     # Clean up response
     response_text = response.json()['results'][0]['text']
     response_lines = response_text.split("\n")
     print("Character name: " + char_name)
     print(f"Response lines: \n" + str(response_lines))
-    for x in range(0, len(response_lines)):
-        #print("Response: " + response_lines[x])
-        #print("Split: " + response_lines[x].split(":")[-1])
-        #print("Splitted: " + str(response_lines[x].split(":")[0]))
-        if response_lines[x].split(":")[-1] != '': #and response_lines[x].split(":")[0] == char_name:
-            response_text = response_lines[x].split(":")[-1]
-            break
-
-    if response_lines[x].split(":")[-1] == '':
+    
+    print(user)
+    if response_lines[0].split(":")[0].lower() == user.lower():
         response_text = generate_response(prompt, user)
+    elif response_lines[0].split(":")[-1] == '':
+        response_text = generate_response(prompt, user)
+    elif response_lines[0].split(":")[-1] != '': #and response_lines[x].split(":")[0] == char_name:
+        response_text = response_lines[0].split(":")[-1]
     
     ###################################################################
     # Replace bad words
@@ -379,23 +382,24 @@ async def reply_to_message(message):
 async def reply_with_gif(message):
     global settings
 
-    reply = generate_response(f"\"{message.content}\" react to this message", "SYSTEM")
-    memory.pop(-1)
+    reply = generate_response(f"{message.content}", message.author.name)
+    #memory.pop(-1)
         
     keywords = extract_keywords_POS(reply)
     if len(keywords) == 0:
-        await reply_to_message(message)
+        memory.pop(-1)
+        #await reply_to_message(message)
+        await message.channel.send(reply, reference=message, mention_author=False)
         return
     
     print(keywords)
 
     string = ""
     counter = 0
-
     for word in keywords:
         string += f"{word} "
         counter += 1
-        if counter >= 3:
+        if counter >= 5:
             break
 
     api_key = settings["tenor_api_key"]
