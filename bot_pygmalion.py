@@ -35,11 +35,18 @@ import base64
 # 4. Memory keywords: Link a keyword to a specific saved string, load when appropriate
 ########################################################################
 
+# Make paths if they do not exist
 if not os.path.exists("./downloads"):
     os.makedirs("./downloads")
 
 if not os.path.exists("./generated_images"):
     os.makedirs("./generated_images")
+
+if not os.path.exists("./json"):
+    os.makedirs("./json")
+
+if not os.path.exists("./relations"):
+    os.makedirs("./relations")
 
 # Load words that will NOT be said
 
@@ -328,6 +335,9 @@ def generate_response(prompt, user):
     return response_text
 
 ########################################################################
+# REPLY TO MESSAGES
+########################################################################
+# TEXT
 
 async def reply_to_message(message):
     global sleeping
@@ -362,6 +372,9 @@ async def reply_to_message(message):
     await asyncio.sleep(settings["message_cooldown"])
     sleeping = False
     await message.channel.send(response_text, reference=message, mention_author=False)
+
+########################################################################
+# GIFS
 
 async def reply_with_gif(message):
     global settings
@@ -402,6 +415,9 @@ async def reply_with_gif(message):
     else:
         print("Error")
 
+########################################################################
+# IMAGES
+
 async def reply_with_generated_image(message):
     global settings
 
@@ -411,6 +427,9 @@ async def reply_with_generated_image(message):
     image_file = generate_image(message.content + reply)
     print(image_file)
     await message.channel.send(f"{reply}", file=discord.File(image_file), reference=message, mention_author=False)
+
+########################################################################
+# ADD ONE MESSAGE TO MEMORY
 
 def add_message_to_memory(message):
     global memory
