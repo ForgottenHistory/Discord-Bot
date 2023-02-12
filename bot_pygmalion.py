@@ -158,13 +158,15 @@ load_settings()
 ########################################################################
 
 def generate_image(prompt):
+    global settings
+    
     url = "http://127.0.0.1:7860"
 
     payload = {
         "prompt": prompt,
-        "steps": 15,
-        "width": 768,
-        "height": 768
+        "steps": settings["image_steps"],
+        "width": settings["resolution"],
+        "height": settings["resolution"]
     }
 
     response = requests.post(url=f'{url}/sdapi/v1/txt2img', json=payload)
@@ -214,6 +216,7 @@ async def change_personality(index):
         data = json.load(f)
     # Access the values
     settings["char_name"] = data["char_name"]
+    char_name = data["char_name"]
     char_persona = data["char_persona"]
     char_greeting = data.get("char_greeting", None)
     if char_greeting == None:
@@ -231,8 +234,8 @@ async def change_personality(index):
     preprompt = f"{char_persona}"
     if example_dialogue is not None:
         preprompt +=  f"\nExample dialogue: {example_dialogue}" 
-    if world_scenario is not None and world_scenario != "":
-        preprompt += f"\n<START>\n{char_name}: {world_scenario}"
+    #if world_scenario is not None and world_scenario != "":
+        #preprompt += f"\n{char_name}: {world_scenario}"
     
     memory = []
     if preprompt.endswith("<START>") == False:
@@ -279,7 +282,6 @@ def generate_response(prompt, user):
 
     char_name = settings["char_name"]
 
-    print(memory)
     if len(memory) == 0 or memory[-1] != f"{user}: {prompt}":
         memory.append(f"{user}: {prompt}")
     while len(memory) > settings["memory_length"]:
@@ -426,9 +428,22 @@ async def reply_with_generated_image(message):
     global settings
 
     reply = generate_response(message.content, message.author.name)
-    memory.pop(-1)
-    #print(memory)
-    image_file = generate_image(message.content + reply)
+    #memory.pop(-1)
+
+    keywords = extract_keywords_POS(message.content + " " + reply)
+    if len(keywords) == 0:
+        memory.pop(-1)
+        #await reply_to_message(message)
+        await message.channel.send(reply, reference=message, mention_author=False)
+        return
+    
+    print(keywords)
+
+    string = ""
+    for word in keywords:
+        string += f"{word} "
+        
+    image_file = generate_image(string)
     print(image_file)
     await message.channel.send(f"{reply}", file=discord.File(image_file), reference=message, mention_author=False)
 
@@ -469,14 +484,14 @@ async def on_message(message):
         send_gif_roll = random.uniform(0, 1)
         send_image_roll = random.uniform(0, 1)
 
-        if "make an image" in message.content:
+        if "make an image" in message.content.lower():
             send_image_roll = 1.1
             send_gif_roll = 0.0
         
         if send_gif_roll > settings["gif_rate"] and settings["use_gifs"] == True:
             add_message_to_memory(message)
             await reply_with_gif(message)
-        elif send_image_roll > settings["image_rate"]and settings["use_images"] == True:
+        elif send_image_roll > settings["image_rate"] and settings["use_images"] == True:
             add_message_to_memory(message)
             await reply_with_generated_image(message)
         else:
