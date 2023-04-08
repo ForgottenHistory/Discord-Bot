@@ -6,3 +6,4 @@
 test.py
 generated_images
 !example_settings.json
+__pycache__
