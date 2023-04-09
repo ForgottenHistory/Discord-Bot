@@ -97,7 +97,8 @@ bot_settings = {
 print("Starting bot...")
 
 ########################################################################
-  
+
+bot_settings["use_greeting"] = settings["use_greeting"]
 bot_settings["this_settings"] = load_settings(settings_file)
 
 ########################################################################
@@ -450,7 +451,7 @@ async def on_message(message):
         if message.content.startswith('!!top_k'):
             match = re.search(r"[-+]?(?:\d*\.*\d+)", message.content)
             if match:
-                number = float(match.group())
+                number = int(match.group())
                 bot_settings["this_settings"]["top_k"] = number
                 await message.channel.send(f'Changed top_k')
             else:
