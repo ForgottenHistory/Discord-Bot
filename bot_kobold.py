@@ -9,10 +9,7 @@ import asyncio
 import sys
 
 sys.path.append('E:/Coding/Discord-Bot')
-import func.fix_relations
-import func.find_float_or_int
-import func.check_response_text
-from utility import load_list_from_file, create_directory_if_not_exists, load_settings, extract_keywords_POS, generate_image
+from utility import load_list_from_file, create_directory_if_not_exists, load_settings, extract_keywords_POS, generate_image, check_response_text, fix_relations, find_float_or_int
 from config import banned_words_file, admin_users_file, json_dir, settings_file
 
 ########################################################################
@@ -201,7 +198,7 @@ async def generate_response(prompt, user):
     while len(bot_settings["memory"]) > bot_settings["settings"]["memory_length"]:
         bot_settings["memory"].pop(0) # remove oldest message if memory is full
 
-    prepromt_fixed = func.fix_relations.fix_relations(bot_settings["preprompt"], bot_settings["people_memory"])
+    prepromt_fixed = fix_relations(bot_settings["preprompt"], bot_settings["people_memory"])
 
     ###################################################################
     
@@ -243,7 +240,7 @@ async def generate_response(prompt, user):
     ###################################################################
     # Check if response text is not correct
     # Sends a default response if no
-    func.check_response_text.check_response_text(prompt, response_text, bot_settings["previous_response"], char_name, bot_settings["memory"])
+    check_response_text(prompt, response_text, bot_settings["previous_response"], char_name, bot_settings["memory"])
 
     response_text = re.sub(r'"', '', response_text)
     bot_settings["previous_response"] = response_text
@@ -271,7 +268,7 @@ async def reply_to_message(message):
         # Remove SYSTEM and response from existance
         bot_settings["memory"].pop(-1)
         bot_settings["memory"].pop(-1)
-        rating_value = func.find_float_or_int.find_float_or_int(rating_response)
+        rating_value = find_float_or_int(rating_response)
 
         if rating_value != None:
             bot_settings["people_memory"][message.author.name] = rating_value

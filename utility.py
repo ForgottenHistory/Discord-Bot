@@ -1,5 +1,4 @@
-import os
-import json
+import os, json, random, re
 
 #Part-of-Speech (POS)
 import nltk
@@ -11,6 +10,59 @@ from nltk import word_tokenize, pos_tag, ne_chunk
 from PIL import Image, PngImagePlugin
 import io
 import base64
+
+def check_response_text(prompt, response_text, previous_response, char_name, memory):
+    default_responses = [
+    "I'm not sure what you mean.",
+    "Can you please clarify?",
+    "Can you rephrase the question?",
+    "Sorry, I didn't understand that."
+    ]
+    
+    # Check if response text is not correct
+    # Sends a default response if no
+    if response_text == "":
+        response_text = random.choice(default_responses)
+    elif response_text == prompt:
+        response_text = random.choice(default_responses)
+    elif response_text == previous_response:
+        response_text = random.choice(default_responses)
+    else:
+        memory.append(f"{char_name}: " + response_text)
+
+def fix_relations(preprompt, people_memory):
+    
+    # Add relationships
+    prepromt_fixed = preprompt
+    relations = "Relations("
+    for person in people_memory:
+        value = people_memory[person]
+        if value >= 5.5 and value < 9.5:
+            relations += f"\"You like {person}\"+"
+        elif value >= 9.5:
+            relations += f"\"You love {person}\"+"
+        elif value > 2.0 and value <= 4.5:
+            relations += f"\"You dislike {person}\"+"
+        elif value <= 2.0:
+            relations += f"\"You hate {person}\"+"
+
+    relations = relations[:-1] + ")"
+    
+    # Find the index of the closing curly bracket
+    index = prepromt_fixed.find("}")
+
+    # Insert the relations before the closing bracket
+    prepromt_fixed = prepromt_fixed[:index] + f"{relations}" + prepromt_fixed[index:]
+
+    return prepromt_fixed
+
+# For finding a rating about a user the bot returns
+def find_float_or_int(string):
+    match = re.search("[-+]?\d*\.\d+|\d+", string)
+    if match:
+        return float(match.group())
+    else:
+        return None
 
 def create_directory_if_not_exists(dir_path):
     if not os.path.exists(dir_path):
