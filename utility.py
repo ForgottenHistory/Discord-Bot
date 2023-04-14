@@ -95,7 +95,8 @@ def load_settings(settings_file):
     "top_k": settings["top_k"],
     "top_p": settings["top_p"],
     "typical": 1,
-    "sampler_order": sampler_order
+    "sampler_order": sampler_order,
+    "singleline": False
 }
     print("Loaded settings")
     return this_settings
