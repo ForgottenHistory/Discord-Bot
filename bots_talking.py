@@ -7,15 +7,10 @@ from os import listdir
 from os.path import isfile, join
 import asyncio
 import sys
-sys.path.append('E:/Coding/Discord-Bot')
-import func.fix_relations
-import func.find_float_or_int
-import func.check_response_text
+from utility import fix_relations, find_float_or_int, check_response_text
 
 ########################################################################
-# DISCORD BOT TALKING TO ITSELF WITH PYGMALION
-# use their google collab for api server (or run locally)
-########################################################################
+# DISCORD BOT TALKING TO ITSELF
 ########################################################################
 
 # Make paths if they do not exist
