@@ -13,15 +13,7 @@ from utility import load_list_from_file, create_directory_if_not_exists, load_se
 from config import banned_words_file, admin_users_file, json_dir, settings_file
 
 ########################################################################
-# DISCORD BOT USING PYGMALION
-# use their google collab for api server (or run locally)
-########################################################################
-# TO DO:
-# 1. Put some functions in other py files for better readability
-# 2. fix change_nickname_with_personality setting
-# 3. some first messages will return ' ' when it shouldnt
-#    this breaks the character most of the time
-# 4. Memory keywords: Link a keyword to a specific saved string, load when appropriate
+# DISCORD BOT USING KOBOLD AI
 ########################################################################
 
 # Make paths if they do not exist
@@ -75,7 +67,8 @@ this_settings = {
     "top_k": 0,
     "top_p": 0.9,
     "typical": 1,
-    "sampler_order": sampler_order
+    "sampler_order": sampler_order,
+    "singleline": False
 }
 
 bot_settings = {
@@ -210,16 +203,26 @@ async def generate_response(prompt, user):
     bot_settings["this_settings"]["prompt"] = new_prompt
     headers = {"Content-Type": "application/json"}
     url = settings["api_server"] + "/api/v1/generate"
-    response = await post_request(url, bot_settings["this_settings"], headers)
-    print(response)
+    try:
+        response = await post_request(url, bot_settings["this_settings"], headers)
+        print(response)
+    except Exception as e:
+        print(f"Error while making a post request: {e}")
+        return "I'm sorry, I couldn't generate a response."
+
     # Response code check
-    # check_response_error(response)
+    #check_response_error(response)
     
     ###################################################################
     
     # Clean up response
-    response_text = response['results'][0]['text']
-    response_lines = response_text.split("\n")
+    try:
+        response_text = response['results'][0]['text']
+        response_lines = response_text.split("\n")
+    except KeyError:
+        print("Error: Unexpected response format.")
+        return "I'm sorry, I couldn't generate a response."
+    
     print("Character name: " + char_name)
     print(f"Response lines: \n" + str(response_lines))
     
@@ -232,7 +235,6 @@ async def generate_response(prompt, user):
         response_text = response_lines[0].split(":")[-1]
     
     ###################################################################
-    # Replace bad words
     
     for word in word_list:
         response_text = response_text.replace(word, "%%%%")
@@ -307,7 +309,7 @@ async def reply_with_gif(message):
         if counter >= 5:
             break
 
-    api_key = bot_settings["settings"]["tenor_api_key"]
+    api_key = bot_settings["settinfgs"]["tenor_api_key"]
     client_key = "discord_bot"
     url = f"https://tenor.googleapis.com/v2/search?q={string}&key={api_key}&client_key={client_key}&limit={1}"
     
