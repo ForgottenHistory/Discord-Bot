@@ -1,4 +1,4 @@
-import os, json, random, re
+import os, json, random, re, requests
 
 #Part-of-Speech (POS)
 import nltk
@@ -138,3 +138,16 @@ def generate_image(prompt, steps=20, width=768, height=768):
 
         image.save(f"{save_path}output{num_files+1}.png", pnginfo=pnginfo)
         return f"{save_path}output{num_files+1}.png"
+    
+def check_response_error(response):
+    code = response.status_code
+    # Response code check
+    if code == 200:
+        print(' ')
+        #print('Valid response')
+    elif code == 422:
+        print('Validation error')
+    elif code in [501, 503, 507]:
+        print(response.json())
+    else:
+        print("something went wrong on the request")

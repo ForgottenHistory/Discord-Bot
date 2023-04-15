@@ -7,9 +7,11 @@ from os import listdir
 from os.path import isfile, join
 import asyncio
 import sys
+import requests
 
 sys.path.append('E:/Coding/Discord-Bot')
 from utility import load_list_from_file, create_directory_if_not_exists, load_settings, extract_keywords_POS, generate_image, check_response_text, fix_relations, find_float_or_int
+from utility import check_response_error
 from config import banned_words_file, admin_users_file, json_dir, settings_file
 
 ########################################################################
@@ -30,16 +32,13 @@ admin_users = [int(x) for x in admin_users]
 
 # Load character
 counter = 0
-jsonFiles = [f for f in listdir("./json/") if isfile(join("./json/", f))]
+jsonFiles = [f for f in listdir(json_dir) if isfile(join(json_dir, f))]
 for f in jsonFiles:
     counter += 1
     print( str(counter) + ". " + str(f))
 
 print("Which file to load?")
 file_index = int(input())
-
-# Values that need to global
-
 
 #Discord client setup
 with open(f"./settings.json", "r") as f:
@@ -98,6 +97,8 @@ async def send_message(text):
     global bot_settings
     print(bot_settings["settings"]["channelID"])
     channel = client.get_channel(bot_settings["settings"]["channelID"])
+    if text == "":
+        text = "Sorry, I could not generate a response"
     await channel.send(text)
 
 ########################################################################
@@ -105,7 +106,6 @@ async def send_message(text):
 
 async def change_personality(index):
     global jsonFiles
-    global jsonFilePath
     global bot_settings
 
     if index > len(jsonFiles) or index < 0:
@@ -155,20 +155,6 @@ async def change_personality(index):
     if bot_settings["use_greeting"] and char_greeting != None:
         await send_message(char_greeting)
     
-########################################################################
-
-def check_response_error(response):
-    code = response.status_code
-    # Response code check
-    if code == 200:
-        print(' ')
-        #print('Valid response')
-    elif code == 422:
-        print('Validation error')
-    elif code in [501, 503, 507]:
-        print(response.json())
-    else:
-        print("something went wrong on the request")
 ########################################################################
         
 async def post_request(url, json_data, headers):
@@ -225,6 +211,9 @@ async def generate_response(prompt, user):
     
     print("Character name: " + char_name)
     print(f"Response lines: \n" + str(response_lines))
+     
+    if response_lines[0] == "":
+        return "I'm sorry, I couldn't generate a response."
     
     print(user)
     if response_lines[0].split(":")[0].lower() == user.lower():
