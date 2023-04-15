@@ -5,12 +5,12 @@ from commands.send_message import send_message
 #####################################################################################################
 
 class Character:
-    def __init__(self, char_name, char_persona, char_greeting, example_dialogue, world_scenario):
-        self.char_name = char_name
-        self.char_persona = char_persona
-        self.char_greeting = char_greeting
-        self.example_dialogue = example_dialogue
-        self.world_scenario = world_scenario
+    def __init__(self):
+        self.char_name = None
+        self.char_persona = None
+        self.char_greeting = None
+        self.example_dialogue = None
+        self.world_scenario = None
 
 #####################################################################################################
 # 1. Load the json file
@@ -80,9 +80,9 @@ def load_relations(character, bot_settings):
 #####################################################################################################
 # 5. Send the greeting if present
 
-def send_greeting(character, bot_settings):
+async def send_greeting(character, bot_settings):
     if bot_settings["use_greeting"] and character.char_greeting != None:
-        send_message(character.char_greeting, bot_settings)
+        await send_message(character.char_greeting, bot_settings)
 
 #####################################################################################################
 
@@ -94,6 +94,6 @@ async def change_personality(index, bot_settings):
     
     set_preprompt(character, bot_settings)
     load_relations(character, bot_settings)
-    send_greeting(character, bot_settings)
+    await send_greeting(character, bot_settings)
 
 #####################################################################################################
