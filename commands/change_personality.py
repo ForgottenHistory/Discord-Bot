@@ -1,11 +1,10 @@
 import json, re
 from os.path import isfile
-import send_message
+from commands.send_message import send_message
 
-async def change_personality(index):
-    global jsonFiles
-    global bot_settings
+async def change_personality(index, bot_settings):
 
+    jsonFiles = bot_settings["jsonFiles"]
     if index > len(jsonFiles) or index < 0:
         return
     

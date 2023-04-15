@@ -8,7 +8,7 @@ from os.path import isfile, join
 import asyncio
 import sys
 import requests
-from .commands.change_personality import change_personality
+from commands.change_personality import change_personality
 
 sys.path.append('E:/Coding/Discord-Bot')
 from utility import load_list_from_file, create_directory_if_not_exists, load_settings, extract_keywords_POS, generate_image, check_response_text, fix_relations, find_float_or_int
@@ -86,6 +86,7 @@ print("Starting bot...")
 
 bot_settings["use_greeting"] = settings["use_greeting"]
 bot_settings["this_settings"] = load_settings(settings_file)
+bot_settings["jsonFiles"] = jsonFiles
 
 intents = discord.Intents().all()
 client = discord.Client(intents=intents)
@@ -351,15 +352,15 @@ def load_commands():
 
 ########################################################################
       
-@client.event
+@bot_settings["client"].event
 async def on_ready():
     global file_index
     
-    print(f'{client.user} has connected to Discord!')
+    print(f'{bot_settings["client"].user} has connected to Discord!')
     load_commands()
-    #await change_personality(file_index)
+    await change_personality(file_index, bot_settings)
 
 ########################################################################
 
 
-client.run(settings["discord_token"])
+bot_settings["client"].run(settings["discord_token"])
