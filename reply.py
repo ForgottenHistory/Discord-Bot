@@ -52,82 +52,79 @@ async def reply_to_message(message, bot_settings):
     bot_settings["sleeping"] = False
     await message.channel.send(response_text, reference=message, mention_author=False)
 
-    ########################################################################     
+########################################################################     
 # Generate the response
+
+async def update_memory(prompt, user, bot_settings):
+    if len(bot_settings["memory"]) == 0 or bot_settings["memory"][-1] != f"{user}: {prompt}":
+        bot_settings["memory"].append(f"{user}: {prompt}")
+    while len(bot_settings["memory"]) > bot_settings["settings"]["memory_length"]:
+        bot_settings["memory"].pop(0)  # remove oldest message if memory is full
+
+    return "\n".join(f"{mem}" for mem in bot_settings["memory"])
+
+async def fetch_response(url, prompt, headers):
+    try:
+        response = await post_request(url, prompt, headers)
+    except Exception as e:
+        print(f"Error while making a post request: {e}")
+        return None
+
+    return response
+
+async def process_response(response, prompt, user, bot_settings):
+    try:
+        response_text = response['results'][0]['text']
+        response_lines = response_text.split("\n")
+    except KeyError:
+        print("Error: Unexpected response format.")
+        return None
+
+    if response_lines[0] == "":
+        return None
+
+    if response_lines[0].split(":")[0].lower() == user.lower():
+        response_text = await generate_response(prompt, user, bot_settings)
+    elif response_lines[0].split(":")[-1] == '':
+        response_text = await generate_response(prompt, user, bot_settings)
+    elif response_lines[0].split(":")[-1] != '':
+        response_text = response_lines[0].split(":")[-1]
+
+    return response_text
+
 
 async def generate_response(prompt, user, bot_settings):
     global word_list
 
     char_name = bot_settings["char_name"]
 
-    if len(bot_settings["memory"]) == 0 or bot_settings["memory"][-1] != f"{user}: {prompt}":
-        bot_settings["memory"].append(f"{user}: {prompt}")
-    while len(bot_settings["memory"]) > bot_settings["settings"]["memory_length"]:
-        bot_settings["memory"].pop(0) # remove oldest message if memory is full
-
+    memory_text = await update_memory(prompt, user, bot_settings)
     prepromt_fixed = fix_relations(bot_settings["preprompt"], bot_settings["people_memory"])
 
-    ###################################################################
-    
-    # Concatenate the most recent messages in memory to use as the prompt
-    new_prompt = prepromt_fixed + "\n"
-    new_prompt += "\n".join(f"{mem}" for mem in bot_settings["memory"]) + f"\n{char_name}: "
-    #print(f"\n" + new_prompt)
-    
+    new_prompt = prepromt_fixed + "\n" + memory_text + f"\n{char_name}: "
     bot_settings["this_settings"]["prompt"] = new_prompt
+
     headers = {"Content-Type": "application/json"}
     url = bot_settings["settings"]["api_server"] + "/api/v1/generate"
-    try:
-        response = await post_request(url, bot_settings["this_settings"], headers)
-        print(response)
-    except Exception as e:
-        print(f"Error while making a post request: {e}")
+
+    response = await fetch_response(url, bot_settings["this_settings"], headers)
+    if not response:
         return "I'm sorry, I couldn't generate a response."
 
-    # Response code check
-    #check_response_error(response)
-    
-    ###################################################################
-    
-    # Clean up response
-    try:
-        response_text = response['results'][0]['text']
-        response_lines = response_text.split("\n")
-    except KeyError:
-        print("Error: Unexpected response format.")
+    response_text = await process_response(response, prompt, user, bot_settings)
+    if not response_text:
         return "I'm sorry, I couldn't generate a response."
-    
-    print("Character name: " + char_name)
-    print(f"Response lines: \n" + str(response_lines))
-     
-    if response_lines[0] == "":
-        return "I'm sorry, I couldn't generate a response."
-    
-    print(user)
-    if response_lines[0].split(":")[0].lower() == user.lower():
-        response_text = generate_response(prompt, user, bot_settings)
-    elif response_lines[0].split(":")[-1] == '':
-        response_text = generate_response(prompt, user, bot_settings)
-    elif response_lines[0].split(":")[-1] != '': #and response_lines[x].split(":")[0] == char_name:
-        response_text = response_lines[0].split(":")[-1]
-    
-    ###################################################################
-    
-    if response_text == "":
-        return "I'm sorry, I couldn't generate a response."
-    
-    print (response_text)
+
     for word in word_list:
         response_text = response_text.replace(word, "%%%%")
 
-    ###################################################################
-    # Check if response text is not correct
-    # Sends a default response if no
-    check_response_text(prompt, response_text, bot_settings["previous_response"], char_name, bot_settings["memory"])
-
     response_text = re.sub(r'"', '', response_text)
     bot_settings["previous_response"] = response_text
+    await update_memory(response_text, char_name, bot_settings)
+
     return response_text
+
+########################################################################     
 
 async def reply_with_generated_image(message, bot_settings):
 
