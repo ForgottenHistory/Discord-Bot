@@ -1,18 +1,16 @@
 import discord, re, random
 from discord.ext import commands
-import aiohttp
 import json
 import os
 from os import listdir
 from os.path import isfile, join
-import asyncio
 import sys
 import requests
 from commands.change_personality import change_personality
 
 sys.path.append('E:/Coding/Discord-Bot')
-from reply import generate_response, reply_to_message
-from utility import load_list_from_file, create_directory_if_not_exists, load_settings, extract_keywords_POS, generate_image
+from reply import generate_response, reply_to_message, reply_with_generated_image, reply_with_gif, should_reply
+from utility import load_list_from_file, create_directory_if_not_exists, load_settings
 from config import admin_users_file, json_dir, settings_file
 
 ########################################################################
@@ -92,73 +90,6 @@ client = commands.Bot(command_prefix='!!!', intents=intents)
 bot_settings["client"] = client
 
 ########################################################################
-
-async def reply_with_gif(message):
-    global bot_settings
-    reply = generate_response(f"{message.content}", message.author.name, bot_settings)
-    #bot_settings["memory"].pop(-1)
-        
-    keywords = extract_keywords_POS(reply)
-    if len(keywords) == 0:
-        bot_settings["memory"].pop(-1)
-        #await reply_to_message(message)
-        await message.channel.send(reply, reference=message, mention_author=False)
-        return
-    
-    print(keywords)
-
-    string = ""
-    counter = 0
-    for word in keywords:
-        string += f"{word} "
-        counter += 1
-        if counter >= 5:
-            break
-
-    api_key = bot_settings["settinfgs"]["tenor_api_key"]
-    client_key = "discord_bot"
-    url = f"https://tenor.googleapis.com/v2/search?q={string}&key={api_key}&client_key={client_key}&limit={1}"
-    
-    response = requests.get(url)
-
-    if response.status_code == 200:
-        gifs = json.loads(response.content)
-        url = gifs["results"][0]["media_formats"]["gif"]["url"]
-        print("Sent " + url)
-        embed = discord.Embed()
-        embed.url = url
-        embed.set_image(url=url)
-        await message.channel.send(f"{reply}\n {url}", reference=message, mention_author=False)
-    else:
-        print("Error")
-
-########################################################################
-# IMAGES
-
-async def reply_with_generated_image(message):
-    global bot_settings
-
-    reply = generate_response(message.content, message.author.name, bot_settings)
-    #bot_settings["memory"].pop(-1)
-
-    keywords = extract_keywords_POS(message.content + " " + reply)
-    if len(keywords) == 0:
-        bot_settings["memory"].pop(-1)
-        #await reply_to_message(message)
-        await message.channel.send(reply, reference=message, mention_author=False)
-        return
-    
-    print(keywords)
-
-    string = ""
-    for word in keywords:
-        string += f"{word} "
-        
-    image_file = generate_image(string)
-    print(image_file)
-    await message.channel.send(f"{reply}", file=discord.File(image_file), reference=message, mention_author=False)
-
-########################################################################
 # ADD ONE MESSAGE TO MEMORY
 
 def add_message_to_memory(message):
@@ -174,14 +105,6 @@ def add_message_to_memory(message):
 
     
 ########################################################################
-
-def should_reply(message, bot_settings):
-    return (
-        message.channel.id == bot_settings["settings"]["channelID"]
-        and bot_settings["sleeping"] == False
-        and message.content
-        and not message.content.startswith(("!", "<", "http"))
-    )
 
 async def process_admin_commands(message, bot_settings):
     print("test")
@@ -210,10 +133,10 @@ async def handle_reply(message, bot_settings):
 
     if send_gif_roll > bot_settings["settings"]["gif_rate"] and bot_settings["settings"]["use_gifs"] == True:
         add_message_to_memory(message)
-        await reply_with_gif(message)
+        await reply_with_gif(message, bot_settings)
     elif send_image_roll > bot_settings["settings"]["image_rate"] and bot_settings["settings"]["use_images"] == True:
         add_message_to_memory(message)
-        await reply_with_generated_image(message)
+        await reply_with_generated_image(message, bot_settings)
     else:
         await reply_to_message(message, bot_settings)
 
@@ -234,6 +157,5 @@ async def on_ready():
     await change_personality(file_index, bot_settings)
 
 ########################################################################
-
 
 bot_settings["client"].run(settings["discord_token"])

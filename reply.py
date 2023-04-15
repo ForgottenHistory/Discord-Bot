@@ -1,6 +1,8 @@
-import re, json, asyncio, aiohttp
+import re, json, asyncio, aiohttp, requests
+import discord
+
 from config import banned_words_file
-from utility import find_float_or_int, fix_relations, load_list_from_file, check_response_text
+from utility import find_float_or_int, fix_relations, load_list_from_file, check_response_text, extract_keywords_POS, generate_image
 
 # Load words that will NOT be said
 word_list = load_list_from_file(banned_words_file)
@@ -10,6 +12,14 @@ async def post_request(url, json_data, headers):
         async with session.post(url, json=json_data, headers=headers) as response:
             data = await response.json()
             return data
+
+def should_reply(message, bot_settings):
+    return (
+        message.channel.id == bot_settings["settings"]["channelID"]
+        and bot_settings["sleeping"] == False
+        and message.content
+        and not message.content.startswith(("!", "<", "http"))
+    )
 
 async def reply_to_message(message, bot_settings):
     
@@ -114,3 +124,63 @@ async def generate_response(prompt, user, bot_settings):
     response_text = re.sub(r'"', '', response_text)
     bot_settings["previous_response"] = response_text
     return response_text
+
+async def reply_with_generated_image(message, bot_settings):
+
+    reply = generate_response(message.content, message.author.name, bot_settings)
+    #bot_settings["memory"].pop(-1)
+
+    keywords = extract_keywords_POS(message.content + " " + reply)
+    if len(keywords) == 0:
+        bot_settings["memory"].pop(-1)
+        #await reply_to_message(message)
+        await message.channel.send(reply, reference=message, mention_author=False)
+        return
+    
+    print(keywords)
+
+    string = ""
+    for word in keywords:
+        string += f"{word} "
+        
+    image_file = generate_image(string)
+    print(image_file)
+    await message.channel.send(f"{reply}", file=discord.File(image_file), reference=message, mention_author=False)
+
+async def reply_with_gif(message, bot_settings):
+    reply = generate_response(f"{message.content}", message.author.name, bot_settings)
+    #bot_settings["memory"].pop(-1)
+        
+    keywords = extract_keywords_POS(reply)
+    if len(keywords) == 0:
+        bot_settings["memory"].pop(-1)
+        #await reply_to_message(message)
+        await message.channel.send(reply, reference=message, mention_author=False)
+        return
+    
+    print(keywords)
+
+    string = ""
+    counter = 0
+    for word in keywords:
+        string += f"{word} "
+        counter += 1
+        if counter >= 5:
+            break
+
+    api_key = bot_settings["settings"]["tenor_api_key"]
+    client_key = "discord_bot"
+    url = f"https://tenor.googleapis.com/v2/search?q={string}&key={api_key}&client_key={client_key}&limit={1}"
+    
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        gifs = json.loads(response.content)
+        url = gifs["results"][0]["media_formats"]["gif"]["url"]
+        print("Sent " + url)
+        embed = discord.Embed()
+        embed.url = url
+        embed.set_image(url=url)
+        await message.channel.send(f"{reply}\n {url}", reference=message, mention_author=False)
+    else:
+        print("Error")
