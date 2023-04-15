@@ -3,6 +3,8 @@ from commands.reset import reset_memory
 from commands.random import random_values
 from commands.reload_settings import reload_settings
 from commands.change_values import change_personality_command, change_temperature, change_top_k, change_top_p, change_channel
+from commands.softprompt import set_soft_prompt
+from config import soft_prompt_file
 
 async def process_input(message, bot_settings):
     if message.content.startswith("!!") == False:
@@ -34,3 +36,6 @@ async def process_input(message, bot_settings):
         
     elif message.content.startswith('!!help'):
         print("My commands are reset, personality, temperature, top_k, reload and random")
+
+    elif message.content.startswith('!!softprompt'):
+        await set_soft_prompt(soft_prompt_file, message)
