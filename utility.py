@@ -11,7 +11,7 @@ from PIL import Image, PngImagePlugin
 import io
 import base64
 
-def check_response_text(prompt, response_text, previous_response, char_name, memory):
+def check_response_text(prompt, response_text, char_name, bot_settings):
     default_responses = [
     "I'm not sure what you mean.",
     "Can you please clarify?",
@@ -25,10 +25,10 @@ def check_response_text(prompt, response_text, previous_response, char_name, mem
         response_text = random.choice(default_responses)
     elif response_text == prompt:
         response_text = random.choice(default_responses)
-    elif response_text == previous_response:
+    elif response_text == bot_settings["previous_response"]:
         response_text = random.choice(default_responses)
     else:
-        memory.append(f"{char_name}: " + response_text)
+        bot_settings["memory"].append(f"{char_name}: " + response_text)
 
 def fix_relations(preprompt, people_memory):
     
