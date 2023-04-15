@@ -74,7 +74,7 @@ def load_list_from_file(file_path):
     return [x.strip() for x in data]
     
 def load_settings(settings_file):
-    with open(f"./settings.json", "r") as f:
+    with open(f"./{settings_file}", "r") as f:
         settings = json.load(f)
     
     sampler_order = [6,0,1,2,3,4,5]

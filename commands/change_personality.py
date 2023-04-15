@@ -3,7 +3,6 @@ from os.path import isfile
 from commands.send_message import send_message
 
 async def change_personality(index, bot_settings):
-
     jsonFiles = bot_settings["jsonFiles"]
     if index > len(jsonFiles) or index < 0:
         return
@@ -46,7 +45,7 @@ async def change_personality(index, bot_settings):
     else:
         print("No relations saved")
         with open(f"./relations/{char_name}.json", "w") as outfile:
-             json.dump(bot_settings["people_memory"], outfile)
+            json.dump(bot_settings["people_memory"], outfile)
     
     print(bot_settings["preprompt"])
     if bot_settings["use_greeting"] and char_greeting != None:

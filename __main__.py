@@ -5,7 +5,7 @@ import os
 from os import listdir
 from os.path import isfile, join
 import sys
-import requests
+from commands.__commands__ import *
 from commands.change_personality import change_personality
 
 sys.path.append('E:/Coding/Discord-Bot')
@@ -85,7 +85,7 @@ bot_settings["jsonFiles"] = jsonFiles
 
 intents = discord.Intents().all()
 client = discord.Client(intents=intents)
-client = commands.Bot(command_prefix='!!!', intents=intents)
+client = commands.Bot(command_prefix='!!', intents=intents)
 
 bot_settings["client"] = client
 
@@ -107,7 +107,7 @@ def add_message_to_memory(message):
 ########################################################################
 
 async def process_admin_commands(message, bot_settings):
-    print("test")
+    await process_input(message, bot_settings)
 
 @bot_settings["client"].event
 async def on_message(message):
@@ -140,12 +140,6 @@ async def handle_reply(message, bot_settings):
     else:
         await reply_to_message(message, bot_settings)
 
-def load_commands():
-    for file in os.listdir("commands"):
-        if file.endswith(".py"):
-            command_name = file[:-3]
-            bot_settings["client"].load_extension(f"commands.{command_name}")
-
 ########################################################################
       
 @bot_settings["client"].event
@@ -153,7 +147,6 @@ async def on_ready():
     global file_index
     
     print(f'{bot_settings["client"].user} has connected to Discord!')
-    load_commands()
     await change_personality(file_index, bot_settings)
 
 ########################################################################

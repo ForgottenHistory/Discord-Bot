@@ -105,14 +105,18 @@ async def generate_response(prompt, user, bot_settings):
     
     print(user)
     if response_lines[0].split(":")[0].lower() == user.lower():
-        response_text = generate_response(prompt, user)
+        response_text = generate_response(prompt, user, bot_settings)
     elif response_lines[0].split(":")[-1] == '':
-        response_text = generate_response(prompt, user)
+        response_text = generate_response(prompt, user, bot_settings)
     elif response_lines[0].split(":")[-1] != '': #and response_lines[x].split(":")[0] == char_name:
         response_text = response_lines[0].split(":")[-1]
     
     ###################################################################
     
+    if response_text == "":
+        return "I'm sorry, I couldn't generate a response."
+    
+    print (response_text)
     for word in word_list:
         response_text = response_text.replace(word, "%%%%")
 
