@@ -91,6 +91,7 @@ async def change_personality(index, bot_settings):
 
     # Access the values
     character = extract_character(character_data)
+    bot_settings["char_name"] = character.char_name
     
     set_preprompt(character, bot_settings)
     load_relations(character, bot_settings)
