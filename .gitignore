@@ -6,4 +6,5 @@
 test.py
 generated_images
 !example_settings.json
+tomb
 __pycache__
