@@ -43,3 +43,9 @@ async def change_temperature(message, bot_settings):
 async def change_channel(message, bot_settings):
     bot_settings["settings"]["channelID"] = message.channel.id
     await message.channel.send(f'Channel has been set.')
+
+async def change_author_note(message, bot_settings):
+    command, *note_parts = message.content.split()
+    author_note = " ".join(note_parts)
+    bot_settings["author_note"] = author_note
+    await message.channel.send(f'Author note has been set.')

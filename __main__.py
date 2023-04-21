@@ -73,7 +73,8 @@ bot_settings = {
     "sleeping": False,
     "previous_response": None,
     "this_settings": this_settings,
-    "settings": settings
+    "settings": settings,
+    "author_note": "",
 }
 
 print("Starting bot...")

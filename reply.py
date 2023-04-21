@@ -99,7 +99,10 @@ async def generate_response(prompt, user, bot_settings):
     memory_text = await update_memory(prompt, user, bot_settings)
     prepromt_fixed = fix_relations(bot_settings["preprompt"], bot_settings["people_memory"])
 
-    new_prompt = prepromt_fixed + "\n" + memory_text + f"\n{char_name}: "
+    new_prompt = bot_settings["author_note"] + " "
+
+    new_prompt = new_prompt + prepromt_fixed + "\n" + memory_text + f"\n{char_name}: "
+    print(new_prompt)
     bot_settings["this_settings"]["prompt"] = new_prompt
 
     headers = {"Content-Type": "application/json"}
