@@ -23,6 +23,7 @@ def should_reply(message, bot_settings):
 
 async def reply_to_message(message, bot_settings):
     
+    bot_settings["sleeping"] = True
     # Clean the message content
     prompt = re.sub(r'@[A-Za-z0-9]+', '', message.content) # remove mentions
     #prompt = re.sub(r'[^\w\s?]', '', prompt) # remove special characters
@@ -46,9 +47,6 @@ async def reply_to_message(message, bot_settings):
             with open(f"./relations/{char_name}.json", "w") as outfile:
                 json.dump(bot_settings["people_memory"], outfile)
 
-    # Send response message
-    bot_settings["sleeping"] = True
-    await asyncio.sleep(bot_settings["settings"]["message_cooldown"])
     bot_settings["sleeping"] = False
     await message.channel.send(response_text, reference=message, mention_author=False)
 

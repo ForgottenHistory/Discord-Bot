@@ -5,6 +5,7 @@ import os
 from os import listdir
 from os.path import isfile, join
 import sys
+import asyncio
 from commands.__commands__ import *
 from commands.change_personality import change_personality
 
@@ -118,8 +119,14 @@ async def on_message(message):
     if message.author == bot_settings["client"].user:
         return
 
+    if bot_settings["sleeping"]:
+        return
+
     if should_reply(message, bot_settings):
+        print(message.content)
         await handle_reply(message, bot_settings)
+        await asyncio.sleep(5)
+        bot_settings["sleeping"] = False
     elif message.author.id in admin_users and message.content.startswith("!!"):
         await process_admin_commands(message, bot_settings)
 
