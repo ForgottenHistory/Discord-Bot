@@ -2,9 +2,6 @@
 *.json
 *.pt
 !json/Bocchi-chan.json
-!dataset/empty.txt
-test.py
 generated_images
 !example_settings.json
-tomb
 __pycache__
