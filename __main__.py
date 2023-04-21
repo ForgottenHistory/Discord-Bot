@@ -74,7 +74,10 @@ bot_settings = {
     "previous_response": None,
     "this_settings": this_settings,
     "settings": settings,
+    "main_prompt": "",
     "author_note": "",
+    "jailbreak_prompt": "",
+    "nsfw_prompt": ""
 }
 
 print("Starting bot...")
@@ -90,6 +93,11 @@ client = discord.Client(intents=intents)
 client = commands.Bot(command_prefix='!!', intents=intents)
 
 bot_settings["client"] = client
+
+bot_settings["main_prompt"] = settings["main_prompt"]
+bot_settings["author_note"] = settings["author_note"]
+bot_settings["nsfw_prompt"] = settings["nsfw_prompt"]
+bot_settings["jailbreak_prompt"] = settings["jailbreak_prompt"]
 
 ########################################################################
 # ADD ONE MESSAGE TO MEMORY

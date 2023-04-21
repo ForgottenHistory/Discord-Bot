@@ -90,21 +90,54 @@ async def process_response(response, prompt, user, bot_settings):
 
     return response_text
 
+async def structure_prompt(prompt, user, bot_settings):
+    # Structure up the prompt
+    char_name = bot_settings["char_name"]
+
+    memory_text = await update_memory(prompt, user, bot_settings)
+    character_description = fix_relations(bot_settings["preprompt"], bot_settings["people_memory"])
+    
+    new_prompt = ""
+    
+    # Main prompt
+    if bot_settings["main_prompt"] != "":
+        main_prompt = bot_settings["main_prompt"].replace("*char*", char_name)
+        main_prompt = main_prompt.replace("*user*", user)
+        new_prompt = new_prompt +main_prompt + " "
+
+    # NSFW prompt
+    if bot_settings["nsfw_prompt"] != "":
+        nsfw_prompt = bot_settings["nsfw_prompt"].replace("*char*", char_name)
+        nsfw_prompt = nsfw_prompt.replace("*user*", user)
+        new_prompt = new_prompt + nsfw_prompt + " "
+
+    # Character description
+    new_prompt = new_prompt + character_description
+
+    # Author note
+    if bot_settings["author_note"] != "":
+        new_prompt = new_prompt + "\n" + bot_settings["author_note"]
+    
+    # Memory
+    new_prompt = new_prompt + "\n" + memory_text
+
+    # Jailbreak prompt
+    if bot_settings["jailbreak_prompt"] != "":
+        jailbreak_prompt = bot_settings["jailbreak_prompt"].replace("*char*", char_name)
+        jailbreak_prompt = jailbreak_prompt.replace("*user*", user)
+        new_prompt = new_prompt + "\n" + jailbreak_prompt + " "
+
+    new_prompt = new_prompt + f"\n{char_name}: "
+    #print(new_prompt)
+
+    return prompt
 
 async def generate_response(prompt, user, bot_settings):
     global word_list
 
-    char_name = bot_settings["char_name"]
+    bot_settings["this_settings"]["prompt"] = await structure_prompt(prompt, user, bot_settings)
 
-    memory_text = await update_memory(prompt, user, bot_settings)
-    prepromt_fixed = fix_relations(bot_settings["preprompt"], bot_settings["people_memory"])
-
-    new_prompt = bot_settings["author_note"] + " "
-
-    new_prompt = new_prompt + prepromt_fixed + "\n" + memory_text + f"\n{char_name}: "
-    print(new_prompt)
-    bot_settings["this_settings"]["prompt"] = new_prompt
-
+    # Generate the response
     headers = {"Content-Type": "application/json"}
     url = bot_settings["settings"]["api_server"] + "/api/v1/generate"
 
@@ -112,7 +145,9 @@ async def generate_response(prompt, user, bot_settings):
     if not response:
         return "I'm sorry, I couldn't generate a response."
 
+    # Process the response
     response_text = await process_response(response, prompt, user, bot_settings)
+    print(response_text)
     if not response_text:
         return "I'm sorry, I couldn't generate a response."
 
@@ -121,7 +156,7 @@ async def generate_response(prompt, user, bot_settings):
 
     response_text = re.sub(r'"', '', response_text)
     bot_settings["previous_response"] = response_text
-    await update_memory(response_text, char_name, bot_settings)
+    await update_memory(response_text, bot_settings["char_name"], bot_settings)
 
     return response_text
 
