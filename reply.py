@@ -130,7 +130,7 @@ async def structure_prompt(prompt, user, bot_settings):
     new_prompt = new_prompt + f"\n{char_name}: "
     #print(new_prompt)
 
-    return prompt
+    return new_prompt
 
 async def generate_response(prompt, user, bot_settings):
     global word_list
@@ -147,10 +147,11 @@ async def generate_response(prompt, user, bot_settings):
 
     # Process the response
     response_text = await process_response(response, prompt, user, bot_settings)
-    print(response_text)
+
     if not response_text:
         return "I'm sorry, I couldn't generate a response."
 
+    print("response: " + response_text)
     for word in word_list:
         response_text = response_text.replace(word, "%%%%")
 
