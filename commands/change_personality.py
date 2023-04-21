@@ -62,7 +62,7 @@ def set_preprompt(character, bot_settings):
     if bot_settings["preprompt"].endswith("<START>") == False:
         bot_settings["memory"].append("<START>")
     if character.char_greeting is not None:
-        bot_settings["memory"].append(character.char_greeting)
+        bot_settings["memory"].append(  character.char_name + ": " + character.char_greeting)
 
 #####################################################################################################
 # 4. Load the relations
