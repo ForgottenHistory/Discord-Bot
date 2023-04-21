@@ -5,3 +5,4 @@
 generated_images
 !example_settings.json
 __pycache__
+secret.py
