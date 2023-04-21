@@ -250,7 +250,7 @@ async def generate_response(prompt, user, bot_settings):
         "messages": messages,
         "model": "gpt-3.5-turbo-0301",
         "temperature": bot_settings["settings"]["temperature"],
-        "max_tokens": 50,
+        "max_tokens": bot_settings["settings"]["max_length"],
         "frequency_penalty": 1,
         "presence_penalty": 0.9,
         "stream": False,
